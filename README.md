@@ -28,6 +28,7 @@ The goal of Proprius is to provide users with a streamlined AI workspace while k
 * Evan Nickason
 * Quintin Bird
 * Jithin Anil Peter
+* Mailles Jonathan Cortes MacHiana
 
 
 ## Status
