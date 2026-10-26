@@ -5,8 +5,7 @@ The goal of Proprius is to provide users with a streamlined AI workspace while k
 
 ## Current Status
 
-Early desktop shell is in place: a **Tauri + React** app launches with a chat interface for sending prompts and viewing responses.
-Local LLM / Ollama integration is not wired yet — replies currently come from a placeholder service.
+Early desktop shell is in place with conversation management and sidebar. SQLite required for persistence. Ollama not yet integrated.
 
 ## Prerequisites
 
