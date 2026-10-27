@@ -1,3 +1,5 @@
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { ChatMessage } from "../types/chat";
 
 interface MessageBubbleProps {
@@ -21,9 +23,17 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             Assistant
           </p>
         )}
-        <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed">
-          {message.content}
-        </p>
+        {isUser ? (
+          <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed">
+            {message.content}
+          </p>
+        ) : (
+          <div className="markdown-body break-words text-[15px] leading-relaxed">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {message.content}
+            </ReactMarkdown>
+          </div>
+        )}
       </div>
     </div>
   );

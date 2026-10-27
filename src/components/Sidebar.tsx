@@ -81,6 +81,9 @@ export function Sidebar({
         <p className="text-[10px] uppercase tracking-wide text-ink-muted">
           Storage · placeholder
         </p>
+        <p className="mt-1 text-[10px] uppercase tracking-wide text-ink-muted">
+          Runtime · Ollama
+        </p>
       </div>
     </aside>
   );

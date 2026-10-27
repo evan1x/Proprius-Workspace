@@ -5,7 +5,9 @@ The goal of Proprius is to provide users with a streamlined AI workspace while k
 
 ## Current Status
 
-Early desktop shell is in place with conversation management and sidebar. SQLite required for persistence. Ollama not yet integrated.
+Desktop shell is in place with conversation management and sidebar.
+**Ollama** is wired for local generation. Initial test model: **`llama3.2:3b`**.
+Conversation persistence still uses an in-memory placeholder (SQLite planned).
 
 ## Prerequisites
 
@@ -13,6 +15,16 @@ Early desktop shell is in place with conversation management and sidebar. SQLite
 - [Rust](https://www.rust-lang.org/tools/install) (via rustup)
 - On Windows: [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the **Desktop development with C++** workload
 - WebView2 (included with recent Windows 10/11)
+- [Ollama](https://ollama.com/) running locally
+
+## Ollama setup
+
+```bash
+ollama pull llama3.2:3b
+ollama serve
+```
+
+Confirm the API is reachable at `http://localhost:11434`.
 
 ## Getting Started
 
@@ -48,7 +60,7 @@ This starts the Vite frontend and opens the Proprius desktop window.
 * **Desktop Framework:** Tauri 2
 * **Backend:** Rust
 * **Database:** SQLite (planned)
-* **Local LLM Integration:** Ollama (planned)
+* **Local LLM Integration:** Ollama (`llama3.2:3b`)
 * **Version Control:** Git and GitHub
 
 ## Team Members
