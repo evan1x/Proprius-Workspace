@@ -6,8 +6,8 @@ The goal of Proprius is to provide users with a streamlined AI workspace while k
 ## Current Status
 
 Desktop shell is in place with conversation management and sidebar.
-**Ollama** is wired for local generation. Initial test model: **`llama3.2:3b`**.
-Conversation persistence still uses an in-memory placeholder (SQLite planned).
+Ollama is wired for local generation. Initial test model: **`llama3.2:3b`**.
+SQLite has been implemented for message persistence and accessing past coversations.
 
 ## Prerequisites
 
@@ -59,7 +59,7 @@ This starts the Vite frontend and opens the Proprius desktop window.
 * **Frontend:** React, TypeScript, Tailwind CSS
 * **Desktop Framework:** Tauri 2
 * **Backend:** Rust
-* **Database:** SQLite (planned)
+* **Database:** SQLite
 * **Local LLM Integration:** Ollama (`llama3.2:3b`)
 * **Version Control:** Git and GitHub
 

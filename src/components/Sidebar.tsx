@@ -41,8 +41,7 @@ export function Sidebar({
       <div className="flex-1 overflow-y-auto">
         {conversations.length === 0 ? (
           <p className="px-4 py-6 text-xs text-ink-muted">
-            No saved chats yet. Persistence is a placeholder until SQLite is
-            connected.
+            No saved chats yet. Send a prompt to create one.
           </p>
         ) : (
           <ul className="flex flex-col">
@@ -79,7 +78,7 @@ export function Sidebar({
 
       <div className="border-t border-line px-4 py-3">
         <p className="text-[10px] uppercase tracking-wide text-ink-muted">
-          Storage · placeholder
+          Storage · SQLite
         </p>
         <p className="mt-1 text-[10px] uppercase tracking-wide text-ink-muted">
           Runtime · Ollama

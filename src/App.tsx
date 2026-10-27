@@ -2,7 +2,12 @@ import { useEffect, useState } from "react";
 import { ChatInput } from "./components/ChatInput";
 import { ChatWindow } from "./components/ChatWindow";
 import { Sidebar } from "./components/Sidebar";
-import { createEmptyConversation } from "./services/conversations";
+import {
+  clearConversation,
+  createEmptyConversation,
+  listConversations,
+  saveMessage,
+} from "./services/conversations";
 import {
   DEFAULT_MODEL,
   checkOllamaStatus,
@@ -26,13 +31,14 @@ function titleFromPrompt(prompt: string): string {
   return `${trimmed.slice(0, 42).trimEnd()}…`;
 }
 
-const initialConversation = createEmptyConversation();
+function sortByUpdatedAt(conversations: Conversation[]): Conversation[] {
+  return [...conversations].sort((a, b) => b.updatedAt - a.updatedAt);
+}
 
 function App() {
-  const [conversations, setConversations] = useState<Conversation[]>([
-    initialConversation,
-  ]);
-  const [activeId, setActiveId] = useState<string | null>(initialConversation.id);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [model] = useState(DEFAULT_MODEL);
@@ -41,6 +47,44 @@ function App() {
   const activeConversation =
     conversations.find((conversation) => conversation.id === activeId) ?? null;
   const messages = activeConversation?.messages ?? [];
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadConversations() {
+      try {
+        const stored = await listConversations();
+        if (cancelled) return;
+
+        if (stored.length > 0) {
+          setConversations(stored);
+          setActiveId(stored[0].id);
+        } else {
+          const conversation = createEmptyConversation();
+          setConversations([conversation]);
+          setActiveId(conversation.id);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Failed to load saved conversations.";
+        setError(message);
+        const conversation = createEmptyConversation();
+        setConversations([conversation]);
+        setActiveId(conversation.id);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    void loadConversations();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,7 +107,10 @@ function App() {
 
   function handleNewChat() {
     const conversation = createEmptyConversation();
-    setConversations((prev) => [conversation, ...prev]);
+    setConversations((prev) => [
+      conversation,
+      ...prev.filter((item) => item.messages.length > 0),
+    ]);
     setActiveId(conversation.id);
     setError(null);
   }
@@ -78,53 +125,76 @@ function App() {
 
     let conversationId = activeId;
     let priorMessages: ChatMessage[] = [];
+    let currentTitle = "New chat";
 
     if (!conversationId) {
       const conversation = createEmptyConversation();
       conversationId = conversation.id;
+      currentTitle = conversation.title;
       setConversations((prev) => [conversation, ...prev]);
       setActiveId(conversation.id);
     } else {
-      priorMessages =
-        conversations.find((conversation) => conversation.id === conversationId)
-          ?.messages ?? [];
+      const existing = conversations.find(
+        (conversation) => conversation.id === conversationId,
+      );
+      priorMessages = existing?.messages ?? [];
+      currentTitle = existing?.title ?? "New chat";
     }
 
     const userMessage = createMessage("user", prompt);
     const nextMessages = [...priorMessages, userMessage];
     const isFirstMessage = priorMessages.length === 0;
+    const nextTitle = isFirstMessage
+      ? titleFromPrompt(prompt)
+      : currentTitle;
+    const updatedAt = Date.now();
 
     setConversations((prev) =>
-      prev.map((conversation) =>
-        conversation.id === conversationId
-          ? {
-              ...conversation,
-              title: isFirstMessage
-                ? titleFromPrompt(prompt)
-                : conversation.title,
-              updatedAt: Date.now(),
-              messages: nextMessages,
-            }
-          : conversation,
+      sortByUpdatedAt(
+        prev.map((conversation) =>
+          conversation.id === conversationId
+            ? {
+                ...conversation,
+                title: nextTitle,
+                updatedAt,
+                messages: nextMessages,
+              }
+            : conversation,
+        ),
       ),
     );
+
+    try {
+      await saveMessage(conversationId, userMessage, nextTitle);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to save your message.";
+      setError(message);
+      return;
+    }
 
     setIsGenerating(true);
 
     try {
       const reply = await generateResponse(nextMessages, model);
       const assistantMessage = createMessage("assistant", reply);
+      const assistantUpdatedAt = Date.now();
+
       setConversations((prev) =>
-        prev.map((conversation) =>
-          conversation.id === conversationId
-            ? {
-                ...conversation,
-                updatedAt: Date.now(),
-                messages: [...conversation.messages, assistantMessage],
-              }
-            : conversation,
+        sortByUpdatedAt(
+          prev.map((conversation) =>
+            conversation.id === conversationId
+              ? {
+                  ...conversation,
+                  updatedAt: assistantUpdatedAt,
+                  messages: [...conversation.messages, assistantMessage],
+                }
+              : conversation,
+          ),
         ),
       );
+
+      await saveMessage(conversationId, assistantMessage);
       setOllamaStatus({ ok: true, model, modelAvailable: true });
     } catch (err) {
       const message =
@@ -137,11 +207,13 @@ function App() {
     }
   }
 
-  function handleClear() {
+  async function handleClear() {
     if (!activeId) return;
+    const conversationId = activeId;
+
     setConversations((prev) =>
       prev.map((conversation) =>
-        conversation.id === activeId
+        conversation.id === conversationId
           ? {
               ...conversation,
               title: "New chat",
@@ -152,6 +224,16 @@ function App() {
       ),
     );
     setError(null);
+
+    try {
+      await clearConversation(conversationId);
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Failed to clear conversation in storage.";
+      setError(message);
+    }
   }
 
   const modelLabel = model;
@@ -180,9 +262,11 @@ function App() {
                 Proprius Workspace
               </h1>
               <p className="mt-0.5 truncate text-xs tracking-wide text-ink-muted uppercase">
-                {activeConversation
-                  ? activeConversation.title
-                  : "No conversation selected"}
+                {isLoading
+                  ? "Loading conversations…"
+                  : activeConversation
+                    ? activeConversation.title
+                    : "No conversation selected"}
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-3">
@@ -196,8 +280,10 @@ function App() {
               </div>
               <button
                 type="button"
-                onClick={handleClear}
-                disabled={messages.length === 0 || isGenerating}
+                onClick={() => {
+                  void handleClear();
+                }}
+                disabled={messages.length === 0 || isGenerating || isLoading}
                 className="border border-line bg-paper px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-ink transition hover:bg-ink hover:text-paper disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-paper disabled:hover:text-ink"
               >
                 Clear
@@ -219,7 +305,10 @@ function App() {
           </div>
         )}
 
-        <ChatInput disabled={isGenerating} onSend={handleSend} />
+        <ChatInput
+          disabled={isGenerating || isLoading}
+          onSend={handleSend}
+        />
       </div>
     </div>
   );
