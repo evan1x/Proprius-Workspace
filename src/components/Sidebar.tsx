@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import type { Conversation } from "../types/chat";
 
 interface SidebarProps {
@@ -5,6 +6,7 @@ interface SidebarProps {
   activeId: string | null;
   onSelect: (id: string) => void;
   onNewChat: () => void;
+  onDelete: (id: string) => void;
 }
 
 function formatUpdatedAt(timestamp: number): string {
@@ -22,7 +24,32 @@ export function Sidebar({
   activeId,
   onSelect,
   onNewChat,
+  onDelete,
 }: SidebarProps) {
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!menuOpenId) return;
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        setMenuOpenId(null);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setMenuOpenId(null);
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [menuOpenId]);
+
   return (
     <aside className="flex h-full w-64 shrink-0 flex-col border-r border-line bg-paper">
       <div className="border-b border-line px-4 py-3">
@@ -47,28 +74,85 @@ export function Sidebar({
           <ul className="flex flex-col">
             {conversations.map((conversation) => {
               const isActive = conversation.id === activeId;
+              const isMenuOpen = menuOpenId === conversation.id;
+
               return (
-                <li key={conversation.id} className="border-b border-line">
-                  <button
-                    type="button"
-                    onClick={() => onSelect(conversation.id)}
-                    className={`flex w-full flex-col items-start gap-1 px-4 py-3 text-left transition ${
+                <li
+                  key={conversation.id}
+                  className="relative border-b border-line"
+                >
+                  <div
+                    className={`flex w-full items-stretch transition ${
                       isActive
                         ? "bg-ink text-paper"
                         : "bg-paper text-ink hover:bg-hover"
                     }`}
                   >
-                    <span className="w-full truncate text-sm font-medium">
-                      {conversation.title}
-                    </span>
-                    <span
-                      className={`text-[10px] uppercase tracking-wide ${
-                        isActive ? "text-paper/70" : "text-ink-muted"
-                      }`}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuOpenId(null);
+                        onSelect(conversation.id);
+                      }}
+                      className="min-w-0 flex-1 px-4 py-3 text-left"
                     >
-                      {formatUpdatedAt(conversation.updatedAt)}
-                    </span>
-                  </button>
+                      <span className="block w-full truncate text-sm font-medium">
+                        {conversation.title}
+                      </span>
+                      <span
+                        className={`mt-1 block text-[10px] uppercase tracking-wide ${
+                          isActive ? "text-paper/70" : "text-ink-muted"
+                        }`}
+                      >
+                        {formatUpdatedAt(conversation.updatedAt)}
+                      </span>
+                    </button>
+
+                    <div
+                      ref={isMenuOpen ? menuRef : undefined}
+                      className="relative flex items-start pt-2 pr-2"
+                    >
+                      <button
+                        type="button"
+                        aria-label={`Chat options for ${conversation.title}`}
+                        aria-haspopup="menu"
+                        aria-expanded={isMenuOpen}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setMenuOpenId((current) =>
+                            current === conversation.id ? null : conversation.id,
+                          );
+                        }}
+                        className={`flex h-8 w-8 items-center justify-center border border-transparent text-sm leading-none transition ${
+                          isActive
+                            ? "text-paper hover:border-paper"
+                            : "text-ink-muted hover:border-line hover:text-ink"
+                        }`}
+                      >
+                        ⋮
+                      </button>
+
+                      {isMenuOpen && (
+                        <div
+                          role="menu"
+                          className="absolute top-10 right-0 z-20 min-w-[7.5rem] border border-line bg-paper"
+                        >
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setMenuOpenId(null);
+                              onDelete(conversation.id);
+                            }}
+                            className="w-full px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-ink transition hover:bg-ink hover:text-paper"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </li>
               );
             })}

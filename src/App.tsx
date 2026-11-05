@@ -5,6 +5,7 @@ import { Sidebar } from "./components/Sidebar";
 import {
   clearConversation,
   createEmptyConversation,
+  deleteConversation,
   listConversations,
   saveMessage,
 } from "./services/conversations";
@@ -118,6 +119,54 @@ function App() {
   function handleSelect(id: string) {
     setActiveId(id);
     setError(null);
+  }
+
+  async function handleDelete(id: string) {
+    setError(null);
+
+    const remaining = conversations.filter((conversation) => conversation.id !== id);
+    const wasActive = activeId === id;
+
+    let nextActiveId = activeId;
+    let nextConversations = remaining;
+
+    if (wasActive) {
+      if (remaining.length > 0) {
+        nextActiveId = remaining[0].id;
+      } else {
+        const conversation = createEmptyConversation();
+        nextConversations = [conversation];
+        nextActiveId = conversation.id;
+      }
+    }
+
+    setConversations(nextConversations);
+    setActiveId(nextActiveId);
+
+    try {
+      await deleteConversation(id);
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Failed to delete conversation from storage.";
+      setError(message);
+      try {
+        const stored = await listConversations();
+        if (stored.length > 0) {
+          setConversations(stored);
+          setActiveId(
+            wasActive
+              ? stored[0].id
+              : stored.some((conversation) => conversation.id === activeId)
+                ? activeId
+                : stored[0].id,
+          );
+        }
+      } catch {
+        // Keep optimistic UI if reload also fails.
+      }
+    }
   }
 
   async function handleSend(prompt: string) {
@@ -252,6 +301,9 @@ function App() {
         activeId={activeId}
         onSelect={handleSelect}
         onNewChat={handleNewChat}
+        onDelete={(id) => {
+          void handleDelete(id);
+        }}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
