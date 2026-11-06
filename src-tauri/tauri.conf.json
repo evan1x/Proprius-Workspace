@@ -37,6 +37,9 @@
   "plugins": {
     "sql": {
       "preload": ["sqlite:proprius.db"]
+    },
+    "opener": {
+      "requireLiteralLeadingDot": false
     }
   }
 }

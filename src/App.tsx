@@ -326,6 +326,14 @@ function App() {
                 model={model}
                 disabled={isGenerating || isLoading}
                 onChange={setModel}
+                onModelsChange={(installed) => {
+                  if (
+                    installed.length > 0 &&
+                    !installed.some((entry) => entry.name === model)
+                  ) {
+                    setModel(installed[0].name);
+                  }
+                }}
               />
               <button
                 type="button"

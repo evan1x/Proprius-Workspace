@@ -6,6 +6,15 @@
   "permissions": [
     "core:default",
     "opener:default",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        { "path": "$HOME/.ollama" },
+        { "path": "$HOME/.ollama/**" },
+        { "path": "$HOME/.ollama/models" },
+        { "path": "$HOME/.ollama/models/**" }
+      ]
+    },
     "sql:default",
     "sql:allow-execute"
   ]
