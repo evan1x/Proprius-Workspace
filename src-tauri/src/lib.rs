@@ -6,6 +6,35 @@ fn open_terminal() -> Result<(), String> {
     open_system_terminal().map_err(|err| err.to_string())
 }
 
+/// Fetch HTML from ollama.com (library / search) so the UI can mirror the website catalog.
+#[tauri::command]
+async fn fetch_ollama_html(path: String) -> Result<String, String> {
+    if !path.starts_with('/') || path.contains("://") || path.contains("..") {
+        return Err("Only relative ollama.com paths are allowed.".into());
+    }
+
+    let url = format!("https://ollama.com{path}");
+    let response = reqwest::Client::new()
+        .get(&url)
+        .header(
+            "User-Agent",
+            "PropriusWorkspace/0.1 (+https://github.com/evan1x/Proprius-Workspace)",
+        )
+        .header("Accept", "text/html")
+        .send()
+        .await
+        .map_err(|err| format!("Failed to reach ollama.com: {err}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!("ollama.com returned HTTP {}", response.status()));
+    }
+
+    response
+        .text()
+        .await
+        .map_err(|err| format!("Failed to read ollama.com response: {err}"))
+}
+
 fn open_system_terminal() -> std::io::Result<()> {
     #[cfg(target_os = "windows")]
     {
@@ -103,7 +132,7 @@ pub fn run() {
                 .add_migrations("sqlite:proprius.db", migrations)
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![open_terminal])
+        .invoke_handler(tauri::generate_handler![open_terminal, fetch_ollama_html])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

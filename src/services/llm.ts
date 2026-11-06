@@ -1,8 +1,10 @@
+import { invoke } from "@tauri-apps/api/core";
 import { homeDir, join } from "@tauri-apps/api/path";
 import type { ChatMessage } from "../types/chat";
 
 export const OLLAMA_BASE_URL = "http://localhost:11434";
 export const DEFAULT_MODEL = "llama3.2:3b";
+export const OLLAMA_LIBRARY_URL = "https://ollama.com/library";
 
 export type OllamaStatus =
   | { ok: true; model: string; modelAvailable: boolean }
@@ -19,6 +21,15 @@ export interface PullProgress {
   completed?: number;
   total?: number;
   percent?: number;
+}
+
+/** Model card scraped from ollama.com/library or ollama.com/search. */
+export interface LibraryModel {
+  name: string;
+  description: string;
+  pullsLabel: string;
+  sizes: string[];
+  url: string;
 }
 
 interface OllamaChatMessage {
@@ -82,6 +93,117 @@ export async function getModelsInstallPath(): Promise<string> {
   } catch {
     return "~/.ollama/models";
   }
+}
+
+function stripHtml(value: string): string {
+  return value
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function formatCompactCount(count: number): string {
+  if (count >= 1_000_000) {
+    const millions = count / 1_000_000;
+    return `${millions >= 10 ? millions.toFixed(0) : millions.toFixed(1)}M`;
+  }
+  if (count >= 1_000) {
+    const thousands = count / 1_000;
+    return `${thousands >= 10 ? thousands.toFixed(0) : thousands.toFixed(1)}K`;
+  }
+  return String(count);
+}
+
+function extractPullsLabel(cardHtml: string): string {
+  const downloadsTitle = cardHtml.match(/title="([\d,]+)\s+downloads"/i);
+  if (downloadsTitle) {
+    const count = Number(downloadsTitle[1].replace(/,/g, ""));
+    if (Number.isFinite(count)) return formatCompactCount(count);
+  }
+
+  const withPulls = cardHtml.match(
+    />([\d.]+[KMB]?)<\/span>\s*<span[^>]*>\s*(?:&nbsp;)?Pulls/i,
+  );
+  if (withPulls) return withPulls[1];
+
+  const compact = cardHtml.match(
+    /title="[\d,]+\s+downloads"[\s\S]{0,240}?<span\s*>([^<]+)<\/span>/i,
+  );
+  if (compact) return compact[1].trim();
+
+  return "";
+}
+
+/**
+ * Parse model cards from ollama.com library or search HTML.
+ */
+export function parseOllamaLibraryHtml(html: string): LibraryModel[] {
+  const models: LibraryModel[] = [];
+  const seen = new Set<string>();
+  const cardRe = /<a\s+href="\/library\/([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+
+  let match: RegExpExecArray | null;
+  while ((match = cardRe.exec(html)) !== null) {
+    const rawName = decodeURIComponent(match[1]).trim();
+    if (!rawName || rawName.includes("/") || seen.has(rawName)) continue;
+    seen.add(rawName);
+
+    const body = match[2];
+    const descriptionMatch = body.match(/<p[^>]*>([\s\S]*?)<\/p>/i);
+    const description = descriptionMatch
+      ? stripHtml(descriptionMatch[1])
+      : "";
+    const sizes = [
+      ...body.matchAll(
+        /bg-\[#ddf4ff\][^>]*>\s*([^<]+?)\s*<\/span>/gi,
+      ),
+    ].map((entry) => entry[1].trim().toLowerCase());
+
+    models.push({
+      name: rawName,
+      description,
+      pullsLabel: extractPullsLabel(body),
+      sizes: [...new Set(sizes)],
+      url: `${OLLAMA_LIBRARY_URL}/${rawName}`,
+    });
+  }
+
+  return models;
+}
+
+async function fetchOllamaHtml(path: string): Promise<string> {
+  return invoke<string>("fetch_ollama_html", { path });
+}
+
+/**
+ * Popular models from https://ollama.com/library (site default order).
+ */
+export async function listPopularLibraryModels(
+  limit = 12,
+): Promise<LibraryModel[]> {
+  const html = await fetchOllamaHtml("/library");
+  return parseOllamaLibraryHtml(html).slice(0, limit);
+}
+
+/**
+ * Search models on https://ollama.com/search (popular sort).
+ */
+export async function searchLibraryModels(
+  query: string,
+  limit = 20,
+): Promise<LibraryModel[]> {
+  const q = query.trim();
+  if (!q) return listPopularLibraryModels(limit);
+
+  const path = `/search?q=${encodeURIComponent(q)}&o=popular`;
+  const html = await fetchOllamaHtml(path);
+  return parseOllamaLibraryHtml(html).slice(0, limit);
 }
 
 /**

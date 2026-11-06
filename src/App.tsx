@@ -4,7 +4,6 @@ import { ChatWindow } from "./components/ChatWindow";
 import { ModelSelector } from "./components/ModelSelector";
 import { Sidebar } from "./components/Sidebar";
 import {
-  clearConversation,
   createEmptyConversation,
   deleteConversation,
   listConversations,
@@ -45,6 +44,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
+  const [modelsOpen, setModelsOpen] = useState(false);
 
   const activeConversation =
     conversations.find((conversation) => conversation.id === activeId) ?? null;
@@ -257,35 +257,6 @@ function App() {
     }
   }
 
-  async function handleClear() {
-    if (!activeId) return;
-    const conversationId = activeId;
-
-    setConversations((prev) =>
-      prev.map((conversation) =>
-        conversation.id === conversationId
-          ? {
-              ...conversation,
-              title: "New chat",
-              updatedAt: Date.now(),
-              messages: [],
-            }
-          : conversation,
-      ),
-    );
-    setError(null);
-
-    try {
-      await clearConversation(conversationId);
-    } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : "Failed to clear conversation in storage.";
-      setError(message);
-    }
-  }
-
   const connectionLabel = !ollamaStatus
     ? "Checking Ollama…"
     : ollamaStatus.ok
@@ -321,31 +292,27 @@ function App() {
                     : "No conversation selected"}
               </p>
             </div>
-            <div className="flex shrink-0 items-center gap-3">
-              <ModelSelector
-                model={model}
-                disabled={isGenerating || isLoading}
-                onChange={setModel}
-                onModelsChange={(installed) => {
-                  if (
-                    installed.length > 0 &&
-                    !installed.some((entry) => entry.name === model)
-                  ) {
-                    setModel(installed[0].name);
-                  }
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  void handleClear();
-                }}
-                disabled={messages.length === 0 || isGenerating || isLoading}
-                className="border border-line bg-paper px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-ink transition hover:bg-ink hover:text-paper disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-paper disabled:hover:text-ink"
-              >
-                Clear
-              </button>
-            </div>
+            <button
+              type="button"
+              disabled={isGenerating || isLoading}
+              aria-expanded={modelsOpen}
+              aria-controls="models-side-panel"
+              onClick={() => setModelsOpen((current) => !current)}
+              className="group shrink-0 border border-line bg-paper px-3 py-1.5 text-right transition hover:bg-ink hover:text-paper disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-paper disabled:hover:text-ink"
+            >
+              <p className="text-[10px] uppercase tracking-wide text-ink-muted group-hover:text-paper/70">
+                Model
+              </p>
+              <p className="flex items-center justify-end gap-2 text-xs font-medium uppercase tracking-wide text-ink group-hover:text-paper">
+                <span className="max-w-[9rem] truncate">{model}</span>
+                <span
+                  aria-hidden="true"
+                  className="text-ink-muted group-hover:text-paper/70"
+                >
+                  {modelsOpen ? "›" : "‹"}
+                </span>
+              </p>
+            </button>
           </div>
           <p className="mt-2 text-[10px] uppercase tracking-wide text-ink-muted">
             {connectionLabel}
@@ -367,6 +334,22 @@ function App() {
           onSend={handleSend}
         />
       </div>
+
+      <ModelSelector
+        open={modelsOpen}
+        model={model}
+        disabled={isGenerating || isLoading}
+        onClose={() => setModelsOpen(false)}
+        onChange={setModel}
+        onModelsChange={(installed) => {
+          if (
+            installed.length > 0 &&
+            !installed.some((entry) => entry.name === model)
+          ) {
+            setModel(installed[0].name);
+          }
+        }}
+      />
     </div>
   );
 }

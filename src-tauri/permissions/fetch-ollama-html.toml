@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-fetch-ollama-html"
+description = "Allows fetching Ollama library and search pages from ollama.com."
+commands.allow = ["fetch_ollama_html"]

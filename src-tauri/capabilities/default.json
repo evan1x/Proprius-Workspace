@@ -17,6 +17,7 @@
     },
     "sql:default",
     "sql:allow-execute",
-    "allow-open-terminal"
+    "allow-open-terminal",
+    "allow-fetch-ollama-html"
   ]
 }
