@@ -537,9 +537,16 @@ export function ModelSelector({
                   >
                     <div className="flex items-start gap-3 px-4 py-3.5">
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium uppercase tracking-wide text-ink">
-                          {entry.name}
-                        </p>
+                        <div className="flex min-w-0 items-baseline justify-between gap-3">
+                          <p className="truncate text-sm font-medium uppercase tracking-wide text-ink">
+                            {entry.name}
+                          </p>
+                          {entry.sizeLabel && (
+                            <p className="shrink-0 text-[10px] uppercase tracking-wide text-ink-muted">
+                              {entry.sizeLabel}
+                            </p>
+                          )}
+                        </div>
                         {entry.description && (
                           <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">
                             {entry.description}

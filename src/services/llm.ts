@@ -28,6 +28,8 @@ export interface LibraryModel {
   name: string;
   description: string;
   pullsLabel: string;
+  /** Disk size for the default tag, formatted in GB (e.g. "2.0 GB"). */
+  sizeLabel: string | null;
   sizes: string[];
   url: string;
 }
@@ -169,6 +171,7 @@ export function parseOllamaLibraryHtml(html: string): LibraryModel[] {
       name: rawName,
       description,
       pullsLabel: extractPullsLabel(body),
+      sizeLabel: null,
       sizes: [...new Set(sizes)],
       url: `${OLLAMA_LIBRARY_URL}/${rawName}`,
     });
@@ -181,6 +184,87 @@ async function fetchOllamaHtml(path: string): Promise<string> {
   return invoke<string>("fetch_ollama_html", { path });
 }
 
+const librarySizeCache = new Map<string, string | null>();
+
+/**
+ * Convert a scraped Ollama size token into a GB label.
+ */
+export function formatLibrarySizeLabel(
+  value: string,
+  unit: string,
+): string | null {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+
+  const normalized = unit.toUpperCase();
+  if (normalized === "GB") {
+    return `${amount >= 10 ? amount.toFixed(0) : amount.toFixed(1)} GB`;
+  }
+  if (normalized === "MB") {
+    const gigabytes = amount / 1024;
+    if (gigabytes >= 0.1) {
+      return `${gigabytes.toFixed(1)} GB`;
+    }
+    return `${Math.round(amount)} MB`;
+  }
+  if (normalized === "TB") {
+    return `${(amount * 1024).toFixed(0)} GB`;
+  }
+  return null;
+}
+
+/**
+ * Read the default tag disk size from an ollama.com model page.
+ */
+export function parseLibraryModelSizeLabel(html: string): string | null {
+  const patterns = [
+    />([\d.]+)\s*(GB|MB|TB)<\/p>/i,
+    /([\d.]+)\s*(GB|MB|TB)\s*·/i,
+    /([\d.]+)\s*(GB|MB|TB)\b/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (!match) continue;
+    const label = formatLibrarySizeLabel(match[1], match[2]);
+    if (label) return label;
+  }
+
+  return null;
+}
+
+async function fetchLibraryModelSizeLabel(
+  modelName: string,
+): Promise<string | null> {
+  if (librarySizeCache.has(modelName)) {
+    return librarySizeCache.get(modelName) ?? null;
+  }
+
+  try {
+    const html = await fetchOllamaHtml(
+      `/library/${encodeURIComponent(modelName)}`,
+    );
+    const sizeLabel = parseLibraryModelSizeLabel(html);
+    librarySizeCache.set(modelName, sizeLabel);
+    return sizeLabel;
+  } catch {
+    librarySizeCache.set(modelName, null);
+    return null;
+  }
+}
+
+async function withLibrarySizeLabels(
+  models: LibraryModel[],
+): Promise<LibraryModel[]> {
+  return Promise.all(
+    models.map(async (model) => {
+      if (model.sizeLabel) return model;
+      const sizeLabel = await fetchLibraryModelSizeLabel(model.name);
+      return { ...model, sizeLabel };
+    }),
+  );
+}
+
 /**
  * Popular models from https://ollama.com/library (site default order).
  */
@@ -188,7 +272,8 @@ export async function listPopularLibraryModels(
   limit = 12,
 ): Promise<LibraryModel[]> {
   const html = await fetchOllamaHtml("/library");
-  return parseOllamaLibraryHtml(html).slice(0, limit);
+  const models = parseOllamaLibraryHtml(html).slice(0, limit);
+  return withLibrarySizeLabels(models);
 }
 
 /**
@@ -203,7 +288,8 @@ export async function searchLibraryModels(
 
   const path = `/search?q=${encodeURIComponent(q)}&o=popular`;
   const html = await fetchOllamaHtml(path);
-  return parseOllamaLibraryHtml(html).slice(0, limit);
+  const models = parseOllamaLibraryHtml(html).slice(0, limit);
+  return withLibrarySizeLabels(models);
 }
 
 /**
