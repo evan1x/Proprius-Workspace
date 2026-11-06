@@ -47,6 +47,24 @@ export function ChatInput({ disabled = false, onSend }: ChatInputProps) {
           className="min-h-[3.25rem] flex-1 resize-none border border-line border-r-0 bg-paper px-3.5 py-2.5 text-[15px] text-ink outline-none placeholder:text-ink-muted focus:bg-hover disabled:opacity-50"
         />
         <button
+          type="button"
+          disabled
+          title="File attachments coming soon"
+          aria-label="Attach file (coming soon)"
+          className="shrink-0 border border-line border-r-0 bg-paper px-3 text-ink opacity-50"
+        >
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 16 16"
+            className="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+          >
+            <path d="M8.5 3.5v6.25a2.25 2.25 0 1 1-4.5 0V4.75a1.25 1.25 0 1 1 2.5 0v4.5" />
+          </svg>
+        </button>
+        <button
           type="submit"
           disabled={disabled || !value.trim()}
           className="shrink-0 border border-line bg-ink px-5 text-sm font-medium uppercase tracking-wide text-paper transition hover:bg-paper hover:text-ink disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-ink disabled:hover:text-paper"
