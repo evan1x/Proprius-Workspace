@@ -16,6 +16,7 @@
       ]
     },
     "sql:default",
-    "sql:allow-execute"
+    "sql:allow-execute",
+    "allow-open-terminal"
   ]
 }

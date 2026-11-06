@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
   formatModelSize,
@@ -45,6 +46,8 @@ export function ModelSelector({
   const [pullError, setPullError] = useState<string | null>(null);
   const [pullProgress, setPullProgress] = useState<PullProgress | null>(null);
   const [openPathError, setOpenPathError] = useState<string | null>(null);
+  const [terminalError, setTerminalError] = useState<string | null>(null);
+  const [openingTerminal, setOpeningTerminal] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   async function handleOpenInstallPath() {
@@ -128,6 +131,20 @@ export function ModelSelector({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [open]);
+
+  async function handleOpenTerminal() {
+    setTerminalError(null);
+    setOpeningTerminal(true);
+    try {
+      await invoke("open_terminal");
+    } catch (err) {
+      setTerminalError(
+        toErrorMessage(err, "Could not open a system terminal."),
+      );
+    } finally {
+      setOpeningTerminal(false);
+    }
+  }
 
   async function handlePull(event: FormEvent) {
     event.preventDefault();
@@ -341,6 +358,31 @@ export function ModelSelector({
               <p className="mt-2 text-xs text-ink">{pullError}</p>
             )}
           </form>
+
+          <div className="border-t border-line px-3 py-3">
+            <p className="text-[10px] uppercase tracking-wide text-ink-muted">
+              Advanced
+            </p>
+            <p className="mt-1 text-[11px] leading-snug text-ink-muted">
+              Open a system terminal to run Ollama commands directly.
+            </p>
+            <button
+              type="button"
+              onMouseDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void handleOpenTerminal();
+              }}
+              disabled={openingTerminal}
+              className="mt-2 w-full border border-line px-3 py-2 text-xs font-medium uppercase tracking-wide text-ink transition hover:bg-ink hover:text-paper disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {openingTerminal ? "Opening…" : "Open terminal"}
+            </button>
+            {terminalError && (
+              <p className="mt-2 text-xs text-ink">{terminalError}</p>
+            )}
+          </div>
         </div>
       )}
     </div>

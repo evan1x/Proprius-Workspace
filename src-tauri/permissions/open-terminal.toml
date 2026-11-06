@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-open-terminal"
+description = "Allows opening a system terminal for advanced Ollama control."
+commands.allow = ["open_terminal"]
