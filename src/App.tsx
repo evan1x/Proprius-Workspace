@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ChatInput } from "./components/ChatInput";
 import { ChatWindow } from "./components/ChatWindow";
+import { ModelSelector } from "./components/ModelSelector";
 import { Sidebar } from "./components/Sidebar";
 import {
   clearConversation,
@@ -42,7 +43,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [model] = useState(DEFAULT_MODEL);
+  const [model, setModel] = useState(DEFAULT_MODEL);
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
 
   const activeConversation =
@@ -285,7 +286,6 @@ function App() {
     }
   }
 
-  const modelLabel = model;
   const connectionLabel = !ollamaStatus
     ? "Checking Ollama…"
     : ollamaStatus.ok
@@ -322,14 +322,11 @@ function App() {
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-3">
-              <div className="border border-line px-3 py-1.5 text-right">
-                <p className="text-[10px] uppercase tracking-wide text-ink-muted">
-                  Model
-                </p>
-                <p className="text-xs font-medium uppercase tracking-wide text-ink">
-                  {modelLabel}
-                </p>
-              </div>
+              <ModelSelector
+                model={model}
+                disabled={isGenerating || isLoading}
+                onChange={setModel}
+              />
               <button
                 type="button"
                 onClick={() => {
