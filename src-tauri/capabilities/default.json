@@ -18,6 +18,7 @@
     "sql:default",
     "sql:allow-execute",
     "allow-open-terminal",
-    "allow-fetch-ollama-html"
+    "allow-fetch-ollama-html",
+    "allow-get-hardware-info"
   ]
 }

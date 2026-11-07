@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ChatInput } from "./components/ChatInput";
 import { ChatWindow } from "./components/ChatWindow";
 import { ModelSelector } from "./components/ModelSelector";
+import { SettingsPanel } from "./components/SettingsPanel";
 import { Sidebar } from "./components/Sidebar";
 import {
   createEmptyConversation,
@@ -45,6 +46,7 @@ function App() {
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
   const [modelsOpen, setModelsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const activeConversation =
     conversations.find((conversation) => conversation.id === activeId) ?? null;
@@ -270,10 +272,18 @@ function App() {
       <Sidebar
         conversations={conversations}
         activeId={activeId}
+        settingsOpen={settingsOpen}
         onSelect={handleSelect}
         onNewChat={handleNewChat}
         onDelete={(id) => {
           void handleDelete(id);
+        }}
+        onOpenSettings={() => {
+          setSettingsOpen((current) => {
+            const next = !current;
+            if (next) setModelsOpen(false);
+            return next;
+          });
         }}
       />
 
@@ -297,7 +307,13 @@ function App() {
               disabled={isGenerating || isLoading}
               aria-expanded={modelsOpen}
               aria-controls="models-side-panel"
-              onClick={() => setModelsOpen((current) => !current)}
+              onClick={() =>
+                setModelsOpen((current) => {
+                  const next = !current;
+                  if (next) setSettingsOpen(false);
+                  return next;
+                })
+              }
               className="group shrink-0 border border-line bg-paper px-3 py-1.5 text-right transition hover:bg-ink hover:text-paper disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-paper disabled:hover:text-ink"
             >
               <p className="text-[10px] uppercase tracking-wide text-ink-muted group-hover:text-paper/70">
@@ -349,6 +365,11 @@ function App() {
             setModel(installed[0].name);
           }
         }}
+      />
+
+      <SettingsPanel
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
       />
     </div>
   );

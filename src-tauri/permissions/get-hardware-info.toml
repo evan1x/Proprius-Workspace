@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-get-hardware-info"
+description = "Allows reading local CPU, memory, GPU, and OS hardware information."
+commands.allow = ["get_hardware_info"]

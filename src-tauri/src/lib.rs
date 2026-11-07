@@ -1,4 +1,144 @@
+use serde::Serialize;
 use tauri_plugin_sql::{Migration, MigrationKind};
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HardwareInfo {
+    os_name: String,
+    os_version: String,
+    hostname: String,
+    arch: String,
+    cpu_brand: String,
+    cpu_cores_physical: usize,
+    cpu_cores_logical: usize,
+    total_memory_bytes: u64,
+    available_memory_bytes: u64,
+    gpus: Vec<String>,
+}
+
+/// Detect local machine hardware for display in Settings.
+#[tauri::command]
+fn get_hardware_info() -> Result<HardwareInfo, String> {
+    use sysinfo::{CpuRefreshKind, MemoryRefreshKind, RefreshKind, System};
+
+    let mut system = System::new_with_specifics(
+        RefreshKind::nothing()
+            .with_cpu(CpuRefreshKind::everything())
+            .with_memory(MemoryRefreshKind::everything()),
+    );
+    system.refresh_cpu_all();
+    system.refresh_memory();
+
+    let cpu_brand = system
+        .cpus()
+        .first()
+        .map(|cpu| cpu.brand().trim().to_string())
+        .filter(|brand| !brand.is_empty())
+        .unwrap_or_else(|| "Unknown CPU".to_string());
+
+    Ok(HardwareInfo {
+        os_name: System::name().unwrap_or_else(|| "Unknown OS".to_string()),
+        os_version: System::os_version().unwrap_or_else(|| "Unknown".to_string()),
+        hostname: System::host_name().unwrap_or_else(|| "Unknown".to_string()),
+        arch: System::cpu_arch(),
+        cpu_brand,
+        cpu_cores_physical: system.physical_core_count().unwrap_or(0),
+        cpu_cores_logical: system.cpus().len(),
+        total_memory_bytes: system.total_memory(),
+        available_memory_bytes: system.available_memory(),
+        gpus: detect_gpus(),
+    })
+}
+
+fn detect_gpus() -> Vec<String> {
+    #[cfg(target_os = "windows")]
+    {
+        let output = std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-Command",
+                "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name",
+            ])
+            .output();
+
+        if let Ok(output) = output {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let gpus: Vec<String> = stdout
+                    .lines()
+                    .map(|line| line.trim().to_string())
+                    .filter(|line| !line.is_empty())
+                    .collect();
+                if !gpus.is_empty() {
+                    return gpus;
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let output = std::process::Command::new("system_profiler")
+            .args(["SPDisplaysDataType", "-json"])
+            .output();
+
+        if let Ok(output) = output {
+            if output.status.success() {
+                if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
+                    let mut gpus = Vec::new();
+                    if let Some(items) = json
+                        .get("SPDisplaysDataType")
+                        .and_then(|value| value.as_array())
+                    {
+                        for item in items {
+                            if let Some(name) = item
+                                .get("sppci_model")
+                                .or_else(|| item.get("_name"))
+                                .and_then(|value| value.as_str())
+                            {
+                                let trimmed = name.trim();
+                                if !trimmed.is_empty() {
+                                    gpus.push(trimmed.to_string());
+                                }
+                            }
+                        }
+                    }
+                    if !gpus.is_empty() {
+                        return gpus;
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let output = std::process::Command::new("sh")
+            .args([
+                "-c",
+                "lspci 2>/dev/null | grep -iE 'vga|3d|display' || true",
+            ])
+            .output();
+
+        if let Ok(output) = output {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let gpus: Vec<String> = stdout
+                    .lines()
+                    .filter_map(|line| {
+                        line.split(": ").nth(1).map(|value| value.trim().to_string())
+                    })
+                    .filter(|line| !line.is_empty())
+                    .collect();
+                if !gpus.is_empty() {
+                    return gpus;
+                }
+            }
+        }
+    }
+
+    Vec::new()
+}
 
 /// Open a system terminal for advanced Ollama control (`ollama list`, `pull`, etc.).
 #[tauri::command]
@@ -132,7 +272,11 @@ pub fn run() {
                 .add_migrations("sqlite:proprius.db", migrations)
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![open_terminal, fetch_ollama_html])
+        .invoke_handler(tauri::generate_handler![
+            open_terminal,
+            fetch_ollama_html,
+            get_hardware_info
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

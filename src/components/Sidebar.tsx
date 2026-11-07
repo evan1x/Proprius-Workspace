@@ -34,9 +34,11 @@ function readStoredSidebarWidth(): number {
 interface SidebarProps {
   conversations: Conversation[];
   activeId: string | null;
+  settingsOpen?: boolean;
   onSelect: (id: string) => void;
   onNewChat: () => void;
   onDelete: (id: string) => void;
+  onOpenSettings?: () => void;
 }
 
 function formatUpdatedAt(timestamp: number): string {
@@ -52,9 +54,11 @@ function formatUpdatedAt(timestamp: number): string {
 export function Sidebar({
   conversations,
   activeId,
+  settingsOpen = false,
   onSelect,
   onNewChat,
   onDelete,
+  onOpenSettings,
 }: SidebarProps) {
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
@@ -295,10 +299,14 @@ export function Sidebar({
         <div className="flex items-center justify-between gap-3">
           <button
             type="button"
-            disabled
-            title="Settings coming soon"
-            aria-label="Settings (coming soon)"
-            className="border border-line px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-wide text-ink opacity-50"
+            aria-expanded={settingsOpen}
+            aria-controls="settings-side-panel"
+            onClick={onOpenSettings}
+            className={`border border-line px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-wide transition ${
+              settingsOpen
+                ? "bg-ink text-paper"
+                : "bg-paper text-ink hover:bg-ink hover:text-paper"
+            }`}
           >
             Settings
           </button>
