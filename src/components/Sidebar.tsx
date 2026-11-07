@@ -1,5 +1,35 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import type { Conversation } from "../types/chat";
+
+const SIDEBAR_WIDTH_STORAGE_KEY = "proprius.conversationsSidebarWidth";
+const SIDEBAR_MIN_WIDTH = 200;
+const SIDEBAR_MAX_WIDTH = 480;
+const SIDEBAR_DEFAULT_WIDTH = 256;
+
+function clampSidebarWidth(width: number): number {
+  return Math.min(
+    SIDEBAR_MAX_WIDTH,
+    Math.max(SIDEBAR_MIN_WIDTH, Math.round(width)),
+  );
+}
+
+function readStoredSidebarWidth(): number {
+  try {
+    const stored = window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY);
+    if (!stored) return SIDEBAR_DEFAULT_WIDTH;
+    const parsed = Number(stored);
+    if (!Number.isFinite(parsed)) return SIDEBAR_DEFAULT_WIDTH;
+    return clampSidebarWidth(parsed);
+  } catch {
+    return SIDEBAR_DEFAULT_WIDTH;
+  }
+}
 
 interface SidebarProps {
   conversations: Conversation[];
@@ -27,7 +57,21 @@ export function Sidebar({
   onDelete,
 }: SidebarProps) {
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
+  const [isResizing, setIsResizing] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const resizeDragRef = useRef<{ startX: number; startWidth: number } | null>(
+    null,
+  );
+  const sidebarWidthRef = useRef(sidebarWidth);
+
+  useEffect(() => {
+    setSidebarWidth(readStoredSidebarWidth());
+  }, []);
+
+  useEffect(() => {
+    sidebarWidthRef.current = sidebarWidth;
+  }, [sidebarWidth]);
 
   useEffect(() => {
     if (!menuOpenId) return;
@@ -50,8 +94,93 @@ export function Sidebar({
     };
   }, [menuOpenId]);
 
+  useEffect(() => {
+    function handlePointerMove(event: PointerEvent) {
+      const drag = resizeDragRef.current;
+      if (!drag) return;
+      // Right-edge drag: moving right widens the left sidebar.
+      const nextWidth = clampSidebarWidth(
+        drag.startWidth + (event.clientX - drag.startX),
+      );
+      setSidebarWidth(nextWidth);
+    }
+
+    function endResize() {
+      if (!resizeDragRef.current) return;
+      resizeDragRef.current = null;
+      setIsResizing(false);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      try {
+        window.localStorage.setItem(
+          SIDEBAR_WIDTH_STORAGE_KEY,
+          String(sidebarWidthRef.current),
+        );
+      } catch {
+        // ignore storage failures
+      }
+    }
+
+    document.addEventListener("pointermove", handlePointerMove);
+    document.addEventListener("pointerup", endResize);
+    document.addEventListener("pointercancel", endResize);
+    return () => {
+      document.removeEventListener("pointermove", handlePointerMove);
+      document.removeEventListener("pointerup", endResize);
+      document.removeEventListener("pointercancel", endResize);
+    };
+  }, []);
+
+  function handleResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    resizeDragRef.current = {
+      startX: event.clientX,
+      startWidth: sidebarWidth,
+    };
+    setIsResizing(true);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }
+
+  function handleResizeKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const delta = event.key === "ArrowRight" ? 16 : -16;
+    setSidebarWidth((current) => {
+      const next = clampSidebarWidth(current + delta);
+      sidebarWidthRef.current = next;
+      try {
+        window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(next));
+      } catch {
+        // ignore storage failures
+      }
+      return next;
+    });
+  }
+
   return (
-    <aside className="flex h-full w-64 shrink-0 flex-col border-r border-line bg-paper">
+    <aside
+      style={{ width: sidebarWidth }}
+      className={`relative flex h-full shrink-0 flex-col border-r border-line bg-paper ${
+        isResizing ? "select-none" : ""
+      }`}
+    >
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize conversations panel"
+        aria-valuemin={SIDEBAR_MIN_WIDTH}
+        aria-valuemax={SIDEBAR_MAX_WIDTH}
+        aria-valuenow={sidebarWidth}
+        tabIndex={0}
+        onPointerDown={handleResizePointerDown}
+        onKeyDown={handleResizeKeyDown}
+        className={`absolute top-0 right-0 z-10 h-full w-1.5 translate-x-1/2 cursor-col-resize touch-none ${
+          isResizing ? "bg-ink" : "bg-transparent hover:bg-ink/40"
+        }`}
+      />
+
       <div className="border-b border-line px-4 py-3">
         <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
           Conversations
@@ -120,7 +249,9 @@ export function Sidebar({
                         onClick={(event) => {
                           event.stopPropagation();
                           setMenuOpenId((current) =>
-                            current === conversation.id ? null : conversation.id,
+                            current === conversation.id
+                              ? null
+                              : conversation.id,
                           );
                         }}
                         className={`flex h-8 w-8 items-center justify-center border border-transparent text-sm leading-none transition ${
