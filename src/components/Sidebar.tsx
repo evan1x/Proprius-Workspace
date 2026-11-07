@@ -292,12 +292,20 @@ export function Sidebar({
       </div>
 
       <div className="border-t border-line px-4 py-3">
-        <p className="text-[10px] uppercase tracking-wide text-ink-muted">
-          Storage · SQLite
-        </p>
-        <p className="mt-1 text-[10px] uppercase tracking-wide text-ink-muted">
-          Runtime · Ollama
-        </p>
+        <div className="flex items-center justify-between gap-3">
+          <button
+            type="button"
+            disabled
+            title="Settings coming soon"
+            aria-label="Settings (coming soon)"
+            className="border border-line px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-wide text-ink opacity-50"
+          >
+            Settings
+          </button>
+          <p className="text-[10px] uppercase tracking-wide text-ink-muted">
+            Runtime · Ollama
+          </p>
+        </div>
       </div>
     </aside>
   );
