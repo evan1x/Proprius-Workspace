@@ -11,22 +11,26 @@ import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
   deleteModel,
   formatModelSize,
+  getLibraryBaseName,
+  getLibraryTag,
   getModelsInstallPath,
   listInstalledModels,
+  listModelTagOptions,
   listPopularLibraryModels,
   PullCancelledError,
   pullModel,
   searchLibraryModels,
   type InstalledModel,
   type LibraryModel,
+  type ModelTagOption,
   type PullProgress,
 } from "../services/llm";
 
 interface PendingPull {
-  name: string;
+  baseName: string;
   description?: string;
-  sizeLabel?: string | null;
-  alreadyInstalled: boolean;
+  fallbackSizes: string[];
+  suggestedTag: string | null;
 }
 
 function toErrorMessage(err: unknown, fallback: string): string {
@@ -75,6 +79,12 @@ function readStoredPanelWidth(): number {
   }
 }
 
+export interface ExternalPullRequest {
+  name: string;
+  description?: string;
+  sizes?: string[];
+}
+
 interface ModelSelectorProps {
   open: boolean;
   model: string;
@@ -82,6 +92,9 @@ interface ModelSelectorProps {
   onClose: () => void;
   onChange: (modelId: string) => void;
   onModelsChange?: (models: InstalledModel[]) => void;
+  /** When set while the panel is open, starts the pull confirm flow once. */
+  externalPullRequest?: ExternalPullRequest | null;
+  onExternalPullRequestHandled?: () => void;
 }
 
 export function ModelSelector({
@@ -91,6 +104,8 @@ export function ModelSelector({
   onClose,
   onChange,
   onModelsChange,
+  externalPullRequest = null,
+  onExternalPullRequestHandled,
 }: ModelSelectorProps) {
   const [models, setModels] = useState<InstalledModel[]>([]);
   const [installPath, setInstallPath] = useState("~/.ollama/models");
@@ -100,6 +115,10 @@ export function ModelSelector({
   const [pulling, setPulling] = useState(false);
   const [cancellingPull, setCancellingPull] = useState(false);
   const [pendingPull, setPendingPull] = useState<PendingPull | null>(null);
+  const [tagOptions, setTagOptions] = useState<ModelTagOption[]>([]);
+  const [selectedTagName, setSelectedTagName] = useState<string>("");
+  const [tagsLoading, setTagsLoading] = useState(false);
+  const [tagsError, setTagsError] = useState<string | null>(null);
   const [activePullName, setActivePullName] = useState<string | null>(null);
   const [pullError, setPullError] = useState<string | null>(null);
   const [pullProgress, setPullProgress] = useState<PullProgress | null>(null);
@@ -316,29 +335,110 @@ export function ModelSelector({
 
   function requestPull(
     name: string,
-    details?: { description?: string; sizeLabel?: string | null },
+    details?: {
+      description?: string;
+      sizeLabel?: string | null;
+      sizes?: string[];
+    },
   ) {
     const trimmed = name.trim();
     if (!trimmed || pulling || cancellingPull || disabled) return;
 
+    const baseName = getLibraryBaseName(trimmed);
+    const suggestedTag = getLibraryTag(trimmed);
+
     setPullError(null);
     setPullProgress(null);
+    setTagsError(null);
+    setTagOptions([]);
+    setSelectedTagName(
+      suggestedTag ? `${baseName}:${suggestedTag}` : `${baseName}:latest`,
+    );
     setPendingPull({
-      name: trimmed,
+      baseName,
       description: details?.description,
-      sizeLabel: details?.sizeLabel,
-      alreadyInstalled: isModelInstalled(models, trimmed),
+      fallbackSizes: details?.sizes ?? [],
+      suggestedTag,
     });
   }
+
+  useEffect(() => {
+    if (!open || !externalPullRequest || pulling || cancellingPull || disabled) {
+      return;
+    }
+
+    requestPull(externalPullRequest.name, {
+      description: externalPullRequest.description,
+      sizes: externalPullRequest.sizes,
+    });
+    onExternalPullRequestHandled?.();
+    // Intentionally only react to a new external request while the panel is open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, externalPullRequest]);
+
+  useEffect(() => {
+    if (!pendingPull) return;
+    const request = pendingPull;
+
+    let cancelled = false;
+
+    async function loadTags() {
+      setTagsLoading(true);
+      setTagsError(null);
+      try {
+        const options = await listModelTagOptions(
+          request.baseName,
+          request.fallbackSizes,
+        );
+        if (cancelled) return;
+        setTagOptions(options);
+
+        const preferred =
+          (request.suggestedTag &&
+            options.find(
+              (option) =>
+                option.tag === request.suggestedTag ||
+                option.name === `${request.baseName}:${request.suggestedTag}`,
+            )) ||
+          options.find((option) => option.tag === "latest") ||
+          options[0];
+
+        if (preferred) {
+          setSelectedTagName(preferred.name);
+        } else {
+          setSelectedTagName(request.baseName);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setTagOptions([]);
+        setTagsError(
+          toErrorMessage(err, "Could not load available model sizes."),
+        );
+        setSelectedTagName(request.baseName);
+      } finally {
+        if (!cancelled) setTagsLoading(false);
+      }
+    }
+
+    void loadTags();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingPull]);
 
   async function confirmPull() {
     if (!pendingPull || pulling || disabled) return;
 
-    const trimmed = pendingPull.name;
+    const trimmed = (selectedTagName || pendingPull.baseName).trim();
+    if (!trimmed) return;
+
     const controller = new AbortController();
     pullAbortRef.current = controller;
 
     setPendingPull(null);
+    setTagOptions([]);
+    setTagsError(null);
     setPulling(true);
     setCancellingPull(false);
     setPullError(null);
@@ -460,7 +560,7 @@ export function ModelSelector({
               Confirm download
             </p>
             <p className="mt-1 text-sm font-medium uppercase tracking-wide text-ink">
-              {pendingPull.name}
+              {pendingPull.baseName}
             </p>
           </div>
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4">
@@ -469,20 +569,95 @@ export function ModelSelector({
                 {pendingPull.description}
               </p>
             )}
+
+            <div className="mt-4">
+              <p className="text-[10px] uppercase tracking-wide text-ink-muted">
+                Parameter size
+              </p>
+              <p className="mt-1 text-xs leading-snug text-ink-muted">
+                Choose which variant to download.
+              </p>
+
+              {tagsLoading && (
+                <p className="mt-3 text-xs text-ink-muted">Loading sizes…</p>
+              )}
+
+              {tagsError && (
+                <p className="mt-3 text-xs text-ink">{tagsError}</p>
+              )}
+
+              {!tagsLoading && tagOptions.length > 0 && (
+                <ul className="mt-3 border border-line">
+                  {tagOptions.map((option) => {
+                    const selected = option.name === selectedTagName;
+                    const installed = isModelInstalled(models, option.name);
+                    return (
+                      <li
+                        key={option.name}
+                        className="border-b border-line last:border-b-0"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTagName(option.name)}
+                          className={`flex w-full items-start justify-between gap-3 px-3 py-3 text-left transition ${
+                            selected
+                              ? "bg-ink text-paper"
+                              : "bg-paper text-ink hover:bg-hover"
+                          }`}
+                        >
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium uppercase tracking-wide">
+                              {option.tag}
+                            </span>
+                            <span
+                              className={`mt-1 block text-[10px] uppercase tracking-wide ${
+                                selected ? "text-paper/70" : "text-ink-muted"
+                              }`}
+                            >
+                              {option.name}
+                              {installed ? " · installed" : ""}
+                            </span>
+                          </span>
+                          <span
+                            className={`shrink-0 text-[10px] uppercase tracking-wide ${
+                              selected ? "text-paper/70" : "text-ink-muted"
+                            }`}
+                          >
+                            {option.sizeLabel ?? "—"}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              {!tagsLoading && tagOptions.length === 0 && !tagsError && (
+                <p className="mt-3 text-xs text-ink-muted">
+                  No parameter sizes found. Pulling {pendingPull.baseName} as
+                  latest.
+                </p>
+              )}
+            </div>
+
             <div className="mt-4 border border-line px-3 py-3">
               <p className="text-[10px] uppercase tracking-wide text-ink-muted">
-                Download size
+                Will download
               </p>
-              <p className="mt-1 text-sm text-ink">
-                {pendingPull.sizeLabel ?? "Unknown · depends on selected tag"}
+              <p className="mt-1 break-all text-sm text-ink">
+                {selectedTagName || pendingPull.baseName}
               </p>
-              {pendingPull.alreadyInstalled && (
+              {isModelInstalled(
+                models,
+                selectedTagName || pendingPull.baseName,
+              ) && (
                 <p className="mt-2 text-xs leading-snug text-ink-muted">
-                  This model is already installed. Pulling again may replace
+                  This variant is already installed. Pulling again may replace
                   local files.
                 </p>
               )}
             </div>
+
             <p className="mt-4 text-xs leading-relaxed text-ink-muted">
               Large models can take several minutes and use significant disk
               space. You can cancel during the download; cancelling removes the
@@ -492,17 +667,22 @@ export function ModelSelector({
           <div className="flex gap-2 border-t border-line px-4 py-4">
             <button
               type="button"
-              onClick={() => setPendingPull(null)}
+              onClick={() => {
+                setPendingPull(null);
+                setTagOptions([]);
+                setTagsError(null);
+              }}
               className="flex-1 border border-line px-3 py-2.5 text-xs font-medium uppercase tracking-wide text-ink transition hover:bg-ink hover:text-paper"
             >
               Back
             </button>
             <button
               type="button"
+              disabled={tagsLoading || !selectedTagName}
               onClick={() => {
                 void confirmPull();
               }}
-              className="flex-1 border border-line bg-ink px-3 py-2.5 text-xs font-medium uppercase tracking-wide text-paper transition hover:bg-paper hover:text-ink"
+              className="flex-1 border border-line bg-ink px-3 py-2.5 text-xs font-medium uppercase tracking-wide text-paper transition hover:bg-paper hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
             >
               Confirm pull
             </button>
@@ -705,6 +885,7 @@ export function ModelSelector({
                           requestPull(entry.name, {
                             description: entry.description,
                             sizeLabel: entry.sizeLabel,
+                            sizes: entry.sizes,
                           });
                         }}
                         className="shrink-0 border border-line px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-wide text-ink transition hover:bg-ink hover:text-paper disabled:opacity-40"

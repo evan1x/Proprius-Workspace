@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { ChatInput } from "./components/ChatInput";
 import { ChatWindow } from "./components/ChatWindow";
-import { ModelSelector } from "./components/ModelSelector";
+import {
+  ModelSelector,
+  type ExternalPullRequest,
+} from "./components/ModelSelector";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { Sidebar } from "./components/Sidebar";
 import {
@@ -14,6 +17,8 @@ import {
   DEFAULT_MODEL,
   checkOllamaStatus,
   generateResponse,
+  listInstalledModels,
+  type InstalledModel,
   type OllamaStatus,
 } from "./services/llm";
 import type { ChatMessage, Conversation } from "./types/chat";
@@ -47,6 +52,9 @@ function App() {
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
   const [modelsOpen, setModelsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [installedModels, setInstalledModels] = useState<InstalledModel[]>([]);
+  const [externalPullRequest, setExternalPullRequest] =
+    useState<ExternalPullRequest | null>(null);
 
   const activeConversation =
     conversations.find((conversation) => conversation.id === activeId) ?? null;
@@ -108,6 +116,27 @@ function App() {
       window.clearInterval(interval);
     };
   }, [model]);
+
+  useEffect(() => {
+    if (!settingsOpen && !modelsOpen) return;
+
+    let cancelled = false;
+
+    async function refreshInstalled() {
+      try {
+        const installed = await listInstalledModels();
+        if (!cancelled) setInstalledModels(installed);
+      } catch {
+        // Keep last known list; Settings install labels are best-effort.
+      }
+    }
+
+    void refreshInstalled();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [settingsOpen, modelsOpen]);
 
   function handleNewChat() {
     const conversation = createEmptyConversation();
@@ -357,7 +386,10 @@ function App() {
         disabled={isGenerating || isLoading}
         onClose={() => setModelsOpen(false)}
         onChange={setModel}
+        externalPullRequest={externalPullRequest}
+        onExternalPullRequestHandled={() => setExternalPullRequest(null)}
         onModelsChange={(installed) => {
+          setInstalledModels(installed);
           if (
             installed.length > 0 &&
             !installed.some((entry) => entry.name === model)
@@ -370,6 +402,15 @@ function App() {
       <SettingsPanel
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
+        installedModelNames={installedModels.map((entry) => entry.name)}
+        onInstallSuggestion={(request) => {
+          setSettingsOpen(false);
+          setModelsOpen(true);
+          setExternalPullRequest({
+            name: request.name,
+            description: request.description,
+          });
+        }}
       />
     </div>
   );

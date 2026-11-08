@@ -48,6 +48,16 @@ export interface LibraryModel {
   url: string;
 }
 
+/** Selectable parameter/tag size for a library model pull. */
+export interface ModelTagOption {
+  /** Full pull name, e.g. llama3.2:3b */
+  name: string;
+  /** Tag portion, e.g. 3b or latest */
+  tag: string;
+  /** Disk size label, e.g. 2.0 GB */
+  sizeLabel: string | null;
+}
+
 interface OllamaChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
@@ -277,6 +287,137 @@ async function withLibrarySizeLabels(
       return { ...model, sizeLabel };
     }),
   );
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function getLibraryBaseName(modelName: string): string {
+  const trimmed = modelName.trim();
+  const colon = trimmed.indexOf(":");
+  return colon === -1 ? trimmed : trimmed.slice(0, colon);
+}
+
+export function getLibraryTag(modelName: string): string | null {
+  const trimmed = modelName.trim();
+  const colon = trimmed.indexOf(":");
+  if (colon === -1) return null;
+  const tag = trimmed.slice(colon + 1).trim();
+  return tag || null;
+}
+
+/**
+ * Primary parameter sizes users usually choose (1b, 3b, 70b, latest, …).
+ * Excludes fine-grained quantization tags like 1b-instruct-q4_0.
+ */
+export function isPrimaryParameterTag(tag: string): boolean {
+  const normalized = tag.trim().toLowerCase();
+  if (!normalized) return false;
+  if (normalized === "latest") return true;
+  if (/^\d+(\.\d+)?[bkm]$/i.test(normalized)) return true;
+  if (/^e\d+b$/i.test(normalized)) return true;
+  return false;
+}
+
+/**
+ * Parse primary tags and disk sizes from an ollama.com model tags page.
+ */
+export function parseModelTagsHtml(
+  html: string,
+  baseName: string,
+): ModelTagOption[] {
+  const options: ModelTagOption[] = [];
+  const seen = new Set<string>();
+  const linkPattern = new RegExp(
+    `href="/library/(${escapeRegExp(baseName)}:[^"]+)"`,
+    "gi",
+  );
+
+  const fullNames: string[] = [];
+  let linkMatch: RegExpExecArray | null;
+  while ((linkMatch = linkPattern.exec(html)) !== null) {
+    const fullName = decodeURIComponent(linkMatch[1]).trim();
+    if (!fullName || seen.has(fullName)) continue;
+    seen.add(fullName);
+    fullNames.push(fullName);
+  }
+
+  for (const fullName of fullNames) {
+    const tag = getLibraryTag(fullName);
+    if (!tag || !isPrimaryParameterTag(tag)) continue;
+
+    let sizeLabel: string | null = null;
+    const anchors = [
+      `value="${fullName}"`,
+      `href="/library/${fullName}"`,
+      fullName,
+    ];
+
+    for (const anchor of anchors) {
+      const index = html.indexOf(anchor);
+      if (index === -1) continue;
+      const slice = html.slice(index, index + 4000);
+      const sizeMatch = slice.match(/>([\d.]+)\s*(GB|MB|TB)</i);
+      if (sizeMatch) {
+        sizeLabel = formatLibrarySizeLabel(sizeMatch[1], sizeMatch[2]);
+        break;
+      }
+    }
+
+    options.push({
+      name: fullName,
+      tag,
+      sizeLabel,
+    });
+  }
+
+  // Prefer concrete sizes before "latest", keep stable order otherwise.
+  return options.sort((a, b) => {
+    if (a.tag === "latest" && b.tag !== "latest") return 1;
+    if (b.tag === "latest" && a.tag !== "latest") return -1;
+    return a.tag.localeCompare(b.tag, undefined, { numeric: true });
+  });
+}
+
+/**
+ * Load selectable parameter sizes for a model from ollama.com/library/<name>/tags.
+ */
+export async function listModelTagOptions(
+  modelName: string,
+  fallbackSizes: string[] = [],
+): Promise<ModelTagOption[]> {
+  const baseName = getLibraryBaseName(modelName);
+  if (!baseName) return [];
+
+  try {
+    const html = await fetchOllamaHtml(
+      `/library/${encodeURIComponent(baseName)}/tags`,
+    );
+    const parsed = parseModelTagsHtml(html, baseName);
+    if (parsed.length > 0) return parsed;
+  } catch {
+    // Fall through to badge sizes from the listing card.
+  }
+
+  const uniqueFallback = [...new Set(fallbackSizes.map((size) => size.trim().toLowerCase()))]
+    .filter((size) => isPrimaryParameterTag(size));
+
+  if (uniqueFallback.length === 0) {
+    return [
+      {
+        name: baseName,
+        tag: "latest",
+        sizeLabel: null,
+      },
+    ];
+  }
+
+  return uniqueFallback.map((tag) => ({
+    name: `${baseName}:${tag}`,
+    tag,
+    sizeLabel: null,
+  }));
 }
 
 /**
