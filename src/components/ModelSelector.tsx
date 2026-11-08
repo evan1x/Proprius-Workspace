@@ -9,16 +9,25 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
+  deleteModel,
   formatModelSize,
   getModelsInstallPath,
   listInstalledModels,
   listPopularLibraryModels,
+  PullCancelledError,
   pullModel,
   searchLibraryModels,
   type InstalledModel,
   type LibraryModel,
   type PullProgress,
 } from "../services/llm";
+
+interface PendingPull {
+  name: string;
+  description?: string;
+  sizeLabel?: string | null;
+  alreadyInstalled: boolean;
+}
 
 function toErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) return err.message;
@@ -89,6 +98,9 @@ export function ModelSelector({
   const [listError, setListError] = useState<string | null>(null);
   const [pullName, setPullName] = useState("");
   const [pulling, setPulling] = useState(false);
+  const [cancellingPull, setCancellingPull] = useState(false);
+  const [pendingPull, setPendingPull] = useState<PendingPull | null>(null);
+  const [activePullName, setActivePullName] = useState<string | null>(null);
   const [pullError, setPullError] = useState<string | null>(null);
   const [pullProgress, setPullProgress] = useState<PullProgress | null>(null);
   const [openPathError, setOpenPathError] = useState<string | null>(null);
@@ -103,6 +115,7 @@ export function ModelSelector({
   const panelRef = useRef<HTMLElement | null>(null);
   const libraryRequestId = useRef(0);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const pullAbortRef = useRef<AbortController | null>(null);
   const resizeDragRef = useRef<{ startX: number; startWidth: number } | null>(
     null,
   );
@@ -301,33 +314,90 @@ export function ModelSelector({
     }
   }
 
-  async function runPull(name: string) {
+  function requestPull(
+    name: string,
+    details?: { description?: string; sizeLabel?: string | null },
+  ) {
     const trimmed = name.trim();
-    if (!trimmed || pulling || disabled) return;
+    if (!trimmed || pulling || cancellingPull || disabled) return;
 
+    setPullError(null);
+    setPullProgress(null);
+    setPendingPull({
+      name: trimmed,
+      description: details?.description,
+      sizeLabel: details?.sizeLabel,
+      alreadyInstalled: isModelInstalled(models, trimmed),
+    });
+  }
+
+  async function confirmPull() {
+    if (!pendingPull || pulling || disabled) return;
+
+    const trimmed = pendingPull.name;
+    const controller = new AbortController();
+    pullAbortRef.current = controller;
+
+    setPendingPull(null);
     setPulling(true);
+    setCancellingPull(false);
     setPullError(null);
     setPullProgress({ status: "starting" });
     setPullName(trimmed);
+    setActivePullName(trimmed);
 
     try {
-      await pullModel(trimmed, (progress) => setPullProgress(progress));
+      await pullModel(
+        trimmed,
+        (progress) => setPullProgress(progress),
+        controller.signal,
+      );
       setPullProgress({ status: "success", percent: 100 });
       await refreshModels();
       onChange(trimmed);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to pull model.";
-      setPullError(message);
-      setPullProgress(null);
+      if (err instanceof PullCancelledError || controller.signal.aborted) {
+        setPullProgress({ status: "cancelling" });
+        setCancellingPull(true);
+        try {
+          await deleteModel(trimmed);
+          setPullProgress(null);
+          setPullError("Pull cancelled. The model was removed from this machine.");
+        } catch (deleteErr) {
+          setPullProgress(null);
+          setPullError(
+            toErrorMessage(
+              deleteErr,
+              "Pull cancelled, but the model could not be fully removed. Check Ollama and try deleting it manually.",
+            ),
+          );
+        } finally {
+          await refreshModels();
+        }
+      } else {
+        const message =
+          err instanceof Error ? err.message : "Failed to pull model.";
+        setPullError(message);
+        setPullProgress(null);
+      }
     } finally {
+      pullAbortRef.current = null;
+      setActivePullName(null);
       setPulling(false);
+      setCancellingPull(false);
     }
   }
 
-  async function handlePull(event: FormEvent) {
+  function cancelPull() {
+    if (!pulling || cancellingPull) return;
+    setCancellingPull(true);
+    setPullProgress({ status: "cancelling" });
+    pullAbortRef.current?.abort();
+  }
+
+  function handlePull(event: FormEvent) {
     event.preventDefault();
-    await runPull(pullName);
+    requestPull(pullName);
   }
 
   if (!open) return null;
@@ -371,12 +441,74 @@ export function ModelSelector({
         <button
           type="button"
           onClick={onClose}
+          disabled={pulling || cancellingPull}
           aria-label="Close models panel"
-          className="shrink-0 border border-line px-2.5 py-1.5 text-xs font-medium uppercase tracking-wide text-ink transition hover:bg-ink hover:text-paper"
+          className="shrink-0 border border-line px-2.5 py-1.5 text-xs font-medium uppercase tracking-wide text-ink transition hover:bg-ink hover:text-paper disabled:opacity-40"
         >
           Close
         </button>
       </div>
+
+      {pendingPull && (
+        <div
+          role="dialog"
+          aria-label="Confirm model download"
+          className="absolute inset-0 z-20 flex flex-col bg-paper"
+        >
+          <div className="border-b border-line px-4 py-3">
+            <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
+              Confirm download
+            </p>
+            <p className="mt-1 text-sm font-medium uppercase tracking-wide text-ink">
+              {pendingPull.name}
+            </p>
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4">
+            {pendingPull.description && (
+              <p className="text-sm leading-relaxed text-ink-muted">
+                {pendingPull.description}
+              </p>
+            )}
+            <div className="mt-4 border border-line px-3 py-3">
+              <p className="text-[10px] uppercase tracking-wide text-ink-muted">
+                Download size
+              </p>
+              <p className="mt-1 text-sm text-ink">
+                {pendingPull.sizeLabel ?? "Unknown · depends on selected tag"}
+              </p>
+              {pendingPull.alreadyInstalled && (
+                <p className="mt-2 text-xs leading-snug text-ink-muted">
+                  This model is already installed. Pulling again may replace
+                  local files.
+                </p>
+              )}
+            </div>
+            <p className="mt-4 text-xs leading-relaxed text-ink-muted">
+              Large models can take several minutes and use significant disk
+              space. You can cancel during the download; cancelling removes the
+              model from this machine.
+            </p>
+          </div>
+          <div className="flex gap-2 border-t border-line px-4 py-4">
+            <button
+              type="button"
+              onClick={() => setPendingPull(null)}
+              className="flex-1 border border-line px-3 py-2.5 text-xs font-medium uppercase tracking-wide text-ink transition hover:bg-ink hover:text-paper"
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void confirmPull();
+              }}
+              className="flex-1 border border-line bg-ink px-3 py-2.5 text-xs font-medium uppercase tracking-wide text-paper transition hover:bg-paper hover:text-ink"
+            >
+              Confirm pull
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <section className="border-b border-line px-4 py-4">
@@ -568,9 +700,12 @@ export function ModelSelector({
                       </div>
                       <button
                         type="button"
-                        disabled={pulling || disabled}
+                        disabled={pulling || cancellingPull || disabled}
                         onClick={() => {
-                          void runPull(entry.name);
+                          requestPull(entry.name, {
+                            description: entry.description,
+                            sizeLabel: entry.sizeLabel,
+                          });
                         }}
                         className="shrink-0 border border-line px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-wide text-ink transition hover:bg-ink hover:text-paper disabled:opacity-40"
                       >
@@ -587,7 +722,7 @@ export function ModelSelector({
         <section className="border-t border-line px-4 py-4">
           <form
             onSubmit={(event) => {
-              void handlePull(event);
+              handlePull(event);
             }}
           >
             <p className="text-[10px] uppercase tracking-wide text-ink-muted">
@@ -597,27 +732,45 @@ export function ModelSelector({
               <input
                 type="text"
                 value={pullName}
-                disabled={pulling || disabled}
+                disabled={pulling || cancellingPull || disabled}
                 onChange={(event) => setPullName(event.target.value)}
                 placeholder="e.g. llama3.2:3b"
                 className="min-w-0 flex-1 border border-line border-r-0 bg-paper px-3 py-2.5 text-sm text-ink outline-none placeholder:text-ink-muted focus:bg-hover disabled:opacity-50"
               />
               <button
                 type="submit"
-                disabled={pulling || disabled || !pullName.trim()}
+                disabled={
+                  pulling || cancellingPull || disabled || !pullName.trim()
+                }
                 className="shrink-0 border border-line bg-ink px-4 text-xs font-medium uppercase tracking-wide text-paper transition hover:bg-paper hover:text-ink disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-ink disabled:hover:text-paper"
               >
-                {pulling ? "Pulling…" : "Pull"}
+                Pull
               </button>
             </div>
 
-            {pullProgress && (
-              <p className="mt-2 text-[10px] uppercase tracking-wide text-ink-muted">
-                {pullProgress.status}
-                {typeof pullProgress.percent === "number"
-                  ? ` · ${pullProgress.percent}%`
-                  : ""}
-              </p>
+            {pulling && (
+              <div className="mt-3 border border-line px-3 py-3">
+                <p className="text-[10px] uppercase tracking-wide text-ink-muted">
+                  Downloading {activePullName}
+                </p>
+                <p className="mt-2 text-xs text-ink">
+                  {pullProgress?.status ?? "starting"}
+                  {typeof pullProgress?.percent === "number"
+                    ? ` · ${pullProgress.percent}%`
+                    : ""}
+                </p>
+                <button
+                  type="button"
+                  disabled={cancellingPull}
+                  onClick={cancelPull}
+                  className="mt-3 w-full border border-line px-3 py-2 text-xs font-medium uppercase tracking-wide text-ink transition hover:bg-ink hover:text-paper disabled:opacity-40"
+                >
+                  {cancellingPull ? "Cancelling…" : "Cancel download"}
+                </button>
+                <p className="mt-2 text-[10px] leading-snug text-ink-muted">
+                  Cancel removes this model from your computer.
+                </p>
+              </div>
             )}
 
             {pullError && (

@@ -23,6 +23,20 @@ export interface PullProgress {
   percent?: number;
 }
 
+export class PullCancelledError extends Error {
+  constructor(message = "Pull cancelled.") {
+    super(message);
+    this.name = "PullCancelledError";
+  }
+}
+
+function isAbortError(err: unknown): boolean {
+  return (
+    (err instanceof DOMException && err.name === "AbortError") ||
+    (err instanceof Error && err.name === "AbortError")
+  );
+}
+
 /** Model card scraped from ollama.com/library or ollama.com/search. */
 export interface LibraryModel {
   name: string;
@@ -327,15 +341,55 @@ export async function listInstalledModels(): Promise<InstalledModel[]> {
 }
 
 /**
+ * Delete a model from the local Ollama store.
+ */
+export async function deleteModel(modelName: string): Promise<void> {
+  const name = modelName.trim();
+  if (!name) {
+    throw new Error("Enter a model name to delete.");
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${OLLAMA_BASE_URL}/api/delete`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: name, name }),
+    });
+  } catch {
+    throw new Error(
+      "Cannot reach Ollama at localhost:11434. Make sure Ollama is running.",
+    );
+  }
+
+  if (!response.ok && response.status !== 404) {
+    let detail = `Failed to delete model (Ollama ${response.status}).`;
+    try {
+      const body = (await response.json()) as { error?: string };
+      if (body.error) detail = body.error;
+    } catch {
+      // ignore
+    }
+    throw new Error(detail);
+  }
+}
+
+/**
  * Pull a model from the Ollama registry. Reports streaming progress when provided.
+ * Pass an AbortSignal to cancel; the caller should delete the model afterward.
  */
 export async function pullModel(
   modelName: string,
   onProgress?: (progress: PullProgress) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
   const name = modelName.trim();
   if (!name) {
     throw new Error("Enter a model name to pull (for example llama3.2:3b).");
+  }
+
+  if (signal?.aborted) {
+    throw new PullCancelledError();
   }
 
   let response: Response;
@@ -343,9 +397,13 @@ export async function pullModel(
     response = await fetch(`${OLLAMA_BASE_URL}/api/pull`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, stream: true }),
+      body: JSON.stringify({ name, model: name, stream: true }),
+      signal,
     });
-  } catch {
+  } catch (err) {
+    if (isAbortError(err) || signal?.aborted) {
+      throw new PullCancelledError();
+    }
     throw new Error(
       "Cannot reach Ollama at localhost:11434. Make sure Ollama is running.",
     );
@@ -370,45 +428,68 @@ export async function pullModel(
   const decoder = new TextDecoder();
   let buffer = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+  const abortReader = () => {
+    void reader.cancel().catch(() => undefined);
+  };
+  signal?.addEventListener("abort", abortReader, { once: true });
 
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
+  try {
+    while (true) {
+      if (signal?.aborted) {
+        throw new PullCancelledError();
+      }
 
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-
-      let event: OllamaPullEvent;
+      let chunk: ReadableStreamReadResult<Uint8Array>;
       try {
-        event = JSON.parse(trimmed) as OllamaPullEvent;
-      } catch {
-        continue;
+        chunk = await reader.read();
+      } catch (err) {
+        if (isAbortError(err) || signal?.aborted) {
+          throw new PullCancelledError();
+        }
+        throw err;
       }
 
-      if (event.error) {
-        throw new Error(event.error);
+      const { done, value } = chunk;
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        let event: OllamaPullEvent;
+        try {
+          event = JSON.parse(trimmed) as OllamaPullEvent;
+        } catch {
+          continue;
+        }
+
+        if (event.error) {
+          throw new Error(event.error);
+        }
+
+        const completed = event.completed;
+        const total = event.total;
+        const percent =
+          typeof completed === "number" &&
+          typeof total === "number" &&
+          total > 0
+            ? Math.min(100, Math.round((completed / total) * 100))
+            : undefined;
+
+        onProgress?.({
+          status: event.status ?? "pulling",
+          completed,
+          total,
+          percent,
+        });
       }
-
-      const completed = event.completed;
-      const total = event.total;
-      const percent =
-        typeof completed === "number" &&
-        typeof total === "number" &&
-        total > 0
-          ? Math.min(100, Math.round((completed / total) * 100))
-          : undefined;
-
-      onProgress?.({
-        status: event.status ?? "pulling",
-        completed,
-        total,
-        percent,
-      });
     }
+  } finally {
+    signal?.removeEventListener("abort", abortReader);
   }
 }
 
