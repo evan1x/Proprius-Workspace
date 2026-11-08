@@ -17,14 +17,14 @@ export function ChatWindow({ messages, isGenerating }: ChatWindowProps) {
   const isEmpty = messages.length === 0;
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-6">
-      <div className="mx-auto flex max-w-3xl flex-col gap-3">
+    <div className="flex-1 overflow-y-auto px-5 py-5 md:px-8">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
         {isEmpty && (
-          <div className="mt-20 border border-line px-6 py-10 text-center">
+          <div className="mt-10 border border-line px-6 py-12 text-center md:mt-16">
             <p className="text-sm font-medium uppercase tracking-[0.16em] text-ink">
               Start a conversation
             </p>
-            <p className="mt-3 text-sm text-ink-muted">
+            <p className="mx-auto mt-3 max-w-xl text-sm text-ink-muted">
               Enter a prompt below. Model replies appear here once a runtime is
               connected.
             </p>

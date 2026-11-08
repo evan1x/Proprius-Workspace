@@ -14,8 +14,10 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       className={`flex w-full ${isUser ? "justify-end" : "justify-start"}`}
     >
       <div
-        className={`max-w-[85%] border border-line px-4 py-3 ${
-          isUser ? "bg-ink text-paper" : "bg-paper text-ink"
+        className={`border border-line px-4 py-3 ${
+          isUser
+            ? "max-w-[min(42rem,92%)] bg-ink text-paper"
+            : "w-full max-w-none bg-paper text-ink"
         }`}
       >
         {!isUser && (

@@ -30,9 +30,9 @@ export function ChatInput({ disabled = false, onSend }: ChatInputProps) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="border-t border-line bg-paper px-4 py-3"
+      className="border-t border-line bg-paper px-5 py-3 md:px-8"
     >
-      <div className="mx-auto flex max-w-3xl items-stretch gap-0">
+      <div className="mx-auto flex w-full max-w-5xl items-stretch gap-0">
         <label className="sr-only" htmlFor="prompt-input">
           Prompt
         </label>
