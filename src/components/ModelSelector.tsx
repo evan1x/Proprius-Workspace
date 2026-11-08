@@ -122,6 +122,11 @@ export function ModelSelector({
   const [activePullName, setActivePullName] = useState<string | null>(null);
   const [pullError, setPullError] = useState<string | null>(null);
   const [pullProgress, setPullProgress] = useState<PullProgress | null>(null);
+  const [pendingRemove, setPendingRemove] = useState<InstalledModel | null>(
+    null,
+  );
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const [openPathError, setOpenPathError] = useState<string | null>(null);
   const [terminalError, setTerminalError] = useState<string | null>(null);
   const [openingTerminal, setOpeningTerminal] = useState(false);
@@ -247,12 +252,29 @@ export function ModelSelector({
     if (!open) return;
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !resizeDragRef.current) onClose();
+      if (event.key !== "Escape" || resizeDragRef.current) return;
+      if (pendingRemove) {
+        if (!removing) {
+          setPendingRemove(null);
+          setRemoveError(null);
+        }
+        return;
+      }
+      if (pendingPull || pulling || cancellingPull) return;
+      onClose();
     }
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open, onClose]);
+  }, [
+    open,
+    onClose,
+    pendingRemove,
+    removing,
+    pendingPull,
+    pulling,
+    cancellingPull,
+  ]);
 
   useEffect(() => {
     function handlePointerMove(event: PointerEvent) {
@@ -500,6 +522,32 @@ export function ModelSelector({
     requestPull(pullName);
   }
 
+  async function confirmRemove() {
+    if (!pendingRemove || removing || pulling || disabled) return;
+
+    const target = pendingRemove.name;
+    setRemoving(true);
+    setRemoveError(null);
+
+    try {
+      await deleteModel(target);
+      const remaining = models.filter((entry) => entry.name !== target);
+      setModels(remaining);
+      onModelsChange?.(remaining);
+      if (model === target) {
+        onChange(remaining[0]?.name ?? "");
+      }
+      setPendingRemove(null);
+      await refreshModels();
+    } catch (err) {
+      setRemoveError(
+        toErrorMessage(err, "Could not remove the model from this machine."),
+      );
+    } finally {
+      setRemoving(false);
+    }
+  }
+
   if (!open) return null;
 
   const showingSearch = libraryQuery.trim().length > 0;
@@ -690,6 +738,64 @@ export function ModelSelector({
         </div>
       )}
 
+      {pendingRemove && (
+        <div
+          role="dialog"
+          aria-label="Confirm model removal"
+          className="absolute inset-0 z-20 flex flex-col bg-paper"
+        >
+          <div className="border-b border-line px-4 py-3">
+            <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
+              Remove model
+            </p>
+            <p className="mt-1 break-all text-sm font-medium uppercase tracking-wide text-ink">
+              {pendingRemove.name}
+            </p>
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4">
+            <p className="text-sm leading-relaxed text-ink-muted">
+              This permanently deletes the model from Ollama on this machine
+              ({formatModelSize(pendingRemove.size)}). You will need to
+              download it again to use it later.
+            </p>
+            {model === pendingRemove.name && (
+              <p className="mt-4 text-xs leading-relaxed text-ink-muted">
+                This is your currently selected model. Another installed model
+                will be selected automatically if one remains.
+              </p>
+            )}
+            {removeError && (
+              <p className="mt-4 border border-line px-3 py-2 text-xs text-ink">
+                {removeError}
+              </p>
+            )}
+          </div>
+          <div className="flex gap-2 border-t border-line px-4 py-4">
+            <button
+              type="button"
+              disabled={removing}
+              onClick={() => {
+                setPendingRemove(null);
+                setRemoveError(null);
+              }}
+              className="flex-1 border border-line px-3 py-2.5 text-xs font-medium uppercase tracking-wide text-ink transition hover:bg-ink hover:text-paper disabled:opacity-40"
+            >
+              Keep
+            </button>
+            <button
+              type="button"
+              disabled={removing || disabled}
+              onClick={() => {
+                void confirmRemove();
+              }}
+              className="flex-1 border border-line bg-ink px-3 py-2.5 text-xs font-medium uppercase tracking-wide text-paper transition hover:bg-paper hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {removing ? "Removing…" : "Remove"}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <section className="border-b border-line px-4 py-4">
           <div className="flex items-start justify-between gap-3">
@@ -763,24 +869,24 @@ export function ModelSelector({
               {models.map((entry) => {
                 const isSelected = entry.name === model;
                 return (
-                  <li key={entry.name} className="border-t border-line">
+                  <li
+                    key={entry.name}
+                    className={`flex items-stretch border-t border-line ${
+                      isSelected ? "bg-ink text-paper" : "bg-paper text-ink"
+                    }`}
+                  >
                     <button
                       type="button"
                       role="option"
                       aria-selected={isSelected}
-                      disabled={disabled}
+                      disabled={disabled || removing}
                       onClick={() => onChange(entry.name)}
-                      className={`flex w-full flex-col gap-1 px-4 py-3 text-left transition disabled:opacity-40 ${
-                        isSelected
-                          ? "bg-ink text-paper"
-                          : "bg-paper text-ink hover:bg-hover"
+                      className={`flex min-w-0 flex-1 flex-col justify-center gap-1 px-4 py-3 text-left transition disabled:opacity-40 ${
+                        isSelected ? "" : "hover:bg-hover"
                       }`}
                     >
-                      <span className="flex items-center justify-between gap-2">
-                        <span className="truncate text-sm font-medium uppercase tracking-wide">
-                          {entry.name}
-                        </span>
-                        {isSelected && <span aria-hidden="true">✓</span>}
+                      <span className="truncate text-sm font-medium uppercase tracking-wide">
+                        {entry.name}
                       </span>
                       <span
                         className={`text-[10px] uppercase tracking-wide ${
@@ -789,6 +895,40 @@ export function ModelSelector({
                       >
                         {formatModelSize(entry.size)} · local
                       </span>
+                    </button>
+                    <span
+                      aria-hidden="true"
+                      className={`flex w-9 shrink-0 items-center justify-center border-l border-line ${
+                        isSelected ? "text-paper" : "text-transparent"
+                      }`}
+                    >
+                      <svg
+                        viewBox="0 0 16 16"
+                        className="h-3.5 w-3.5"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="square"
+                      >
+                        <path d="M3.5 8.25 6.5 11.25 12.5 4.75" />
+                      </svg>
+                    </span>
+                    <button
+                      type="button"
+                      disabled={disabled || pulling || removing}
+                      onClick={() => {
+                        setRemoveError(null);
+                        setPendingRemove(entry);
+                      }}
+                      aria-label={`Remove ${entry.name}`}
+                      title="Remove from this machine"
+                      className={`shrink-0 border-l border-line px-3 text-[10px] font-medium uppercase tracking-wide transition disabled:opacity-40 ${
+                        isSelected
+                          ? "text-paper hover:bg-paper hover:text-ink"
+                          : "text-ink-muted hover:bg-ink hover:text-paper"
+                      }`}
+                    >
+                      Remove
                     </button>
                   </li>
                 );
