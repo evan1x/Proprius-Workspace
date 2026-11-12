@@ -558,7 +558,7 @@ export function ModelSelector({
       id="models-side-panel"
       aria-label="Manage Ollama models"
       style={{ width: panelWidth }}
-      className={`relative flex h-full shrink-0 flex-col border-l border-line bg-paper ${
+      className={`relative flex h-full shrink-0 flex-col border-l border-line bg-panel ${
         isResizing ? "select-none" : ""
       }`}
     >
@@ -573,16 +573,16 @@ export function ModelSelector({
         onPointerDown={handleResizePointerDown}
         onKeyDown={handleResizeKeyDown}
         className={`absolute top-0 left-0 z-10 h-full w-1.5 -translate-x-1/2 cursor-col-resize touch-none ${
-          isResizing ? "bg-ink" : "bg-transparent hover:bg-ink/40"
+          isResizing ? "bg-ink/50" : "bg-transparent hover:bg-ink/25"
         }`}
       />
 
-      <div className="flex items-start justify-between gap-3 border-b border-line px-4 py-3">
+      <div className="flex items-start justify-between gap-3 border-b border-line px-4 py-3.5">
         <div className="min-w-0">
           <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
             Models
           </p>
-          <p className="mt-1 truncate text-sm font-medium uppercase tracking-wide text-ink">
+          <p className="mt-1 truncate text-sm font-medium tracking-wide text-ink">
             {model}
           </p>
         </div>
@@ -591,7 +591,7 @@ export function ModelSelector({
           onClick={onClose}
           disabled={pulling || cancellingPull}
           aria-label="Close models panel"
-          className="shrink-0 border border-line px-2.5 py-1.5 text-xs font-medium uppercase tracking-wide text-ink transition hover:bg-ink hover:text-paper disabled:opacity-40"
+          className="shrink-0 border border-line bg-surface px-2.5 py-1.5 text-xs font-medium tracking-wide text-ink transition hover:bg-hover disabled:opacity-40"
         >
           Close
         </button>
@@ -601,7 +601,7 @@ export function ModelSelector({
         <div
           role="dialog"
           aria-label="Confirm model download"
-          className="absolute inset-0 z-20 flex flex-col bg-paper"
+          className="absolute inset-0 z-20 flex flex-col bg-panel"
         >
           <div className="border-b border-line px-4 py-3">
             <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
@@ -742,7 +742,7 @@ export function ModelSelector({
         <div
           role="dialog"
           aria-label="Confirm model removal"
-          className="absolute inset-0 z-20 flex flex-col bg-paper"
+          className="absolute inset-0 z-20 flex flex-col bg-panel"
         >
           <div className="border-b border-line px-4 py-3">
             <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">

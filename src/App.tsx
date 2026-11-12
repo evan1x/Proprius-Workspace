@@ -317,13 +317,13 @@ function App() {
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="border-b border-line px-5 py-3">
+        <header className="border-b border-line bg-paper px-5 py-3.5">
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
-              <h1 className="truncate text-xl font-semibold tracking-tight text-ink uppercase">
+              <h1 className="truncate text-lg font-semibold tracking-tight text-ink">
                 Proprius Workspace
               </h1>
-              <p className="mt-0.5 truncate text-xs tracking-wide text-ink-muted uppercase">
+              <p className="mt-1 truncate text-sm text-ink-muted">
                 {isLoading
                   ? "Loading conversations…"
                   : activeConversation
@@ -343,23 +343,28 @@ function App() {
                   return next;
                 })
               }
-              className="group shrink-0 border border-line bg-paper px-3 py-1.5 text-right transition hover:bg-ink hover:text-paper disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-paper disabled:hover:text-ink"
+              className="group shrink-0 border border-line bg-panel px-3 py-2 text-right transition hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <p className="text-[10px] uppercase tracking-wide text-ink-muted group-hover:text-paper/70">
+              <p className="text-[10px] uppercase tracking-[0.12em] text-ink-muted">
                 Model
               </p>
-              <p className="flex items-center justify-end gap-2 text-xs font-medium uppercase tracking-wide text-ink group-hover:text-paper">
+              <p className="mt-0.5 flex items-center justify-end gap-2 text-xs font-medium tracking-wide text-ink">
                 <span className="max-w-[9rem] truncate">{model}</span>
-                <span
-                  aria-hidden="true"
-                  className="text-ink-muted group-hover:text-paper/70"
-                >
+                <span aria-hidden="true" className="text-ink-muted">
                   {modelsOpen ? "›" : "‹"}
                 </span>
               </p>
             </button>
           </div>
-          <p className="mt-2 text-[10px] uppercase tracking-wide text-ink-muted">
+          <p className="mt-2.5 flex items-center gap-2 text-[11px] text-ink-muted">
+            <span
+              aria-hidden="true"
+              className={`inline-block h-1.5 w-1.5 rounded-full ${
+                ollamaStatus?.ok && ollamaStatus.modelAvailable
+                  ? "bg-ink"
+                  : "bg-ink-muted"
+              }`}
+            />
             {connectionLabel}
           </p>
         </header>
@@ -367,8 +372,8 @@ function App() {
         <ChatWindow messages={messages} isGenerating={isGenerating} />
 
         {error && (
-          <div className="px-4 pb-2">
-            <p className="border border-line bg-paper px-3 py-2 text-sm text-ink">
+          <div className="px-5 pb-2 md:px-8">
+            <p className="mx-auto max-w-3xl border border-line bg-surface px-3 py-2 text-sm text-ink">
               {error}
             </p>
           </div>

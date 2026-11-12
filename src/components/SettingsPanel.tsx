@@ -132,14 +132,14 @@ export function SettingsPanel({
     <aside
       id="settings-side-panel"
       aria-label="Settings"
-      className="relative flex h-full w-[22rem] shrink-0 flex-col border-l border-line bg-paper md:w-[24rem]"
+      className="relative flex h-full w-[22rem] shrink-0 flex-col border-l border-line bg-panel md:w-[24rem]"
     >
-      <div className="flex items-start justify-between gap-3 border-b border-line px-4 py-3">
+      <div className="flex items-start justify-between gap-3 border-b border-line px-4 py-3.5">
         <div className="min-w-0">
           <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
             Settings
           </p>
-          <p className="mt-1 text-sm font-medium uppercase tracking-wide text-ink">
+          <p className="mt-1 text-sm font-medium tracking-wide text-ink">
             Hardware
           </p>
         </div>
@@ -147,7 +147,7 @@ export function SettingsPanel({
           type="button"
           onClick={onClose}
           aria-label="Close settings panel"
-          className="shrink-0 border border-line px-2.5 py-1.5 text-xs font-medium uppercase tracking-wide text-ink transition hover:bg-ink hover:text-paper"
+          className="shrink-0 border border-line bg-surface px-2.5 py-1.5 text-xs font-medium tracking-wide text-ink transition hover:bg-hover"
         >
           Close
         </button>
@@ -284,7 +284,7 @@ export function SettingsPanel({
         <div
           role="dialog"
           aria-label="Confirm suggested model install"
-          className="absolute inset-0 z-20 flex flex-col bg-paper"
+          className="absolute inset-0 z-20 flex flex-col bg-panel"
         >
           <div className="border-b border-line px-4 py-3">
             <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">

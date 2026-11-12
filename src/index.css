@@ -3,13 +3,14 @@
 @theme {
   --font-sans: "IBM Plex Sans", "Segoe UI", sans-serif;
 
-  --color-ink: #ffffff;
-  --color-ink-muted: #888888;
-  --color-paper: #0a0a0a;
-  --color-surface: #0a0a0a;
-  --color-line: #ffffff;
-  --color-hover: #141414;
-  --color-danger: #ffffff;
+  --color-ink: #f4f4f4;
+  --color-ink-muted: #9a9a9a;
+  --color-paper: #242424;
+  --color-panel: #181818;
+  --color-surface: #2e2e2e;
+  --color-line: #3f3f3f;
+  --color-hover: #353535;
+  --color-danger: #f4f4f4;
 }
 
 @layer base {
@@ -35,6 +36,16 @@
   button,
   textarea {
     font: inherit;
+  }
+
+  ::selection {
+    background: #ffffff;
+    color: #181818;
+  }
+
+  :focus-visible {
+    outline: 1px solid var(--color-ink);
+    outline-offset: 2px;
   }
 }
 
@@ -110,6 +121,7 @@
   .markdown-body code {
     font-family: "IBM Plex Mono", "Consolas", "Courier New", monospace;
     font-size: 0.9em;
+    background: var(--color-surface);
     border: 1px solid var(--color-line);
     padding: 0.05em 0.3em;
   }
@@ -119,7 +131,7 @@
     overflow-x: auto;
     border: 1px solid var(--color-line);
     padding: 0.75em 0.9em;
-    background: var(--color-hover);
+    background: var(--color-surface);
   }
 
   .markdown-body pre code {

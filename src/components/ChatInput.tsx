@@ -30,9 +30,9 @@ export function ChatInput({ disabled = false, onSend }: ChatInputProps) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="border-t border-line bg-paper px-5 py-3 md:px-8"
+      className="border-t border-line bg-paper px-5 py-4 md:px-8"
     >
-      <div className="mx-auto flex w-full max-w-5xl items-stretch gap-0">
+      <div className="mx-auto flex w-full max-w-3xl items-stretch overflow-hidden border border-line bg-surface">
         <label className="sr-only" htmlFor="prompt-input">
           Prompt
         </label>
@@ -44,14 +44,14 @@ export function ChatInput({ disabled = false, onSend }: ChatInputProps) {
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Write a prompt… (Enter to send)"
-          className="min-h-[3.25rem] flex-1 resize-none border border-line border-r-0 bg-paper px-3.5 py-2.5 text-[15px] text-ink outline-none placeholder:text-ink-muted focus:bg-hover disabled:opacity-50"
+          className="min-h-[3.25rem] flex-1 resize-none border-0 bg-transparent px-3.5 py-2.5 text-[15px] text-ink outline-none placeholder:text-ink-muted focus-visible:outline-none disabled:opacity-50"
         />
         <button
           type="button"
           disabled
           title="File attachments coming soon"
           aria-label="Attach file (coming soon)"
-          className="shrink-0 border border-line border-r-0 bg-paper px-3 text-ink opacity-50"
+          className="shrink-0 border-l border-line px-3 text-ink-muted opacity-50"
         >
           <svg
             aria-hidden="true"
@@ -67,7 +67,7 @@ export function ChatInput({ disabled = false, onSend }: ChatInputProps) {
         <button
           type="submit"
           disabled={disabled || !value.trim()}
-          className="shrink-0 border border-line bg-ink px-5 text-sm font-medium uppercase tracking-wide text-paper transition hover:bg-paper hover:text-ink disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-ink disabled:hover:text-paper"
+          className="shrink-0 border-l border-line bg-ink px-5 text-sm font-medium tracking-wide text-paper transition hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:bg-surface disabled:text-ink-muted disabled:opacity-60"
         >
           Send
         </button>

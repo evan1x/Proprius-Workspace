@@ -166,7 +166,7 @@ export function Sidebar({
   return (
     <aside
       style={{ width: sidebarWidth }}
-      className={`relative flex h-full shrink-0 flex-col border-r border-line bg-paper ${
+      className={`relative flex h-full shrink-0 flex-col border-r border-line bg-panel ${
         isResizing ? "select-none" : ""
       }`}
     >
@@ -181,18 +181,18 @@ export function Sidebar({
         onPointerDown={handleResizePointerDown}
         onKeyDown={handleResizeKeyDown}
         className={`absolute top-0 right-0 z-10 h-full w-1.5 translate-x-1/2 cursor-col-resize touch-none ${
-          isResizing ? "bg-ink" : "bg-transparent hover:bg-ink/40"
+          isResizing ? "bg-ink/50" : "bg-transparent hover:bg-ink/25"
         }`}
       />
 
-      <div className="border-b border-line px-4 py-3">
+      <div className="border-b border-line px-4 py-3.5">
         <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
           Conversations
         </p>
         <button
           type="button"
           onClick={onNewChat}
-          className="mt-3 w-full border border-line bg-paper px-3 py-2 text-xs font-medium uppercase tracking-wide text-ink transition hover:bg-ink hover:text-paper"
+          className="mt-3 w-full border border-line bg-surface px-3 py-2 text-xs font-medium tracking-wide text-ink transition hover:bg-hover"
         >
           New chat
         </button>
@@ -200,25 +200,22 @@ export function Sidebar({
 
       <div className="flex-1 overflow-y-auto">
         {conversations.length === 0 ? (
-          <p className="px-4 py-6 text-xs text-ink-muted">
+          <p className="px-4 py-6 text-xs leading-relaxed text-ink-muted">
             No saved chats yet. Send a prompt to create one.
           </p>
         ) : (
-          <ul className="flex flex-col">
+          <ul className="flex flex-col py-1">
             {conversations.map((conversation) => {
               const isActive = conversation.id === activeId;
               const isMenuOpen = menuOpenId === conversation.id;
 
               return (
-                <li
-                  key={conversation.id}
-                  className="relative border-b border-line"
-                >
+                <li key={conversation.id} className="relative px-2 py-0.5">
                   <div
                     className={`flex w-full items-stretch transition ${
                       isActive
-                        ? "bg-ink text-paper"
-                        : "bg-paper text-ink hover:bg-hover"
+                        ? "bg-surface text-ink"
+                        : "bg-transparent text-ink hover:bg-hover"
                     }`}
                   >
                     <button
@@ -227,23 +224,19 @@ export function Sidebar({
                         setMenuOpenId(null);
                         onSelect(conversation.id);
                       }}
-                      className="min-w-0 flex-1 px-4 py-3 text-left"
+                      className="min-w-0 flex-1 px-3 py-2.5 text-left"
                     >
                       <span className="block w-full truncate text-sm font-medium">
                         {conversation.title}
                       </span>
-                      <span
-                        className={`mt-1 block text-[10px] uppercase tracking-wide ${
-                          isActive ? "text-paper/70" : "text-ink-muted"
-                        }`}
-                      >
+                      <span className="mt-1 block text-[10px] tracking-wide text-ink-muted">
                         {formatUpdatedAt(conversation.updatedAt)}
                       </span>
                     </button>
 
                     <div
                       ref={isMenuOpen ? menuRef : undefined}
-                      className="relative flex items-start pt-2 pr-2"
+                      className="relative flex items-start pt-1.5 pr-1.5"
                     >
                       <button
                         type="button"
@@ -258,11 +251,7 @@ export function Sidebar({
                               : conversation.id,
                           );
                         }}
-                        className={`flex h-8 w-8 items-center justify-center border border-transparent text-sm leading-none transition ${
-                          isActive
-                            ? "text-paper hover:border-paper"
-                            : "text-ink-muted hover:border-line hover:text-ink"
-                        }`}
+                        className="flex h-7 w-7 items-center justify-center text-sm leading-none text-ink-muted transition hover:text-ink"
                       >
                         ⋮
                       </button>
@@ -270,7 +259,7 @@ export function Sidebar({
                       {isMenuOpen && (
                         <div
                           role="menu"
-                          className="absolute top-10 right-0 z-20 min-w-[7.5rem] border border-line bg-paper"
+                          className="absolute top-9 right-0 z-20 min-w-[7.5rem] border border-line bg-surface"
                         >
                           <button
                             type="button"
@@ -280,7 +269,7 @@ export function Sidebar({
                               setMenuOpenId(null);
                               onDelete(conversation.id);
                             }}
-                            className="w-full px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-ink transition hover:bg-ink hover:text-paper"
+                            className="w-full px-3 py-2 text-left text-xs font-medium tracking-wide text-ink transition hover:bg-hover"
                           >
                             Delete
                           </button>
@@ -304,13 +293,13 @@ export function Sidebar({
             onClick={onOpenSettings}
             className={`border border-line px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-wide transition ${
               settingsOpen
-                ? "bg-ink text-paper"
-                : "bg-paper text-ink hover:bg-ink hover:text-paper"
+                ? "bg-ink text-panel"
+                : "bg-surface text-ink hover:bg-hover"
             }`}
           >
             Settings
           </button>
-          <p className="text-[10px] uppercase tracking-wide text-ink-muted">
+          <p className="text-[10px] tracking-wide text-ink-muted">
             Runtime · Ollama
           </p>
         </div>
