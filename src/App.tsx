@@ -331,30 +331,46 @@ function App() {
                     : "No conversation selected"}
               </p>
             </div>
-            <button
-              type="button"
-              disabled={isGenerating || isLoading}
-              aria-expanded={modelsOpen}
-              aria-controls="models-side-panel"
-              onClick={() =>
-                setModelsOpen((current) => {
-                  const next = !current;
-                  if (next) setSettingsOpen(false);
-                  return next;
-                })
-              }
-              className="group shrink-0 border border-line bg-panel px-3 py-2 text-right transition hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <p className="text-[10px] uppercase tracking-[0.12em] text-ink-muted">
-                Model
-              </p>
-              <p className="mt-0.5 flex items-center justify-end gap-2 text-xs font-medium tracking-wide text-ink">
-                <span className="max-w-[9rem] truncate">{model}</span>
-                <span aria-hidden="true" className="text-ink-muted">
-                  {modelsOpen ? "›" : "‹"}
-                </span>
-              </p>
-            </button>
+            <div className="flex shrink-0 items-stretch gap-2">
+              <button
+                type="button"
+                disabled
+                title="Model settings coming soon"
+                aria-label="Model settings (coming soon)"
+                className="border border-line bg-panel px-3 py-2 text-left opacity-50"
+              >
+                <p className="text-[10px] uppercase tracking-[0.12em] text-ink-muted">
+                  Settings
+                </p>
+                <p className="mt-0.5 text-xs font-medium tracking-wide text-ink-muted">
+                  Parameters
+                </p>
+              </button>
+              <button
+                type="button"
+                disabled={isGenerating || isLoading}
+                aria-expanded={modelsOpen}
+                aria-controls="models-side-panel"
+                onClick={() =>
+                  setModelsOpen((current) => {
+                    const next = !current;
+                    if (next) setSettingsOpen(false);
+                    return next;
+                  })
+                }
+                className="group border border-line bg-panel px-3 py-2 text-right transition hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <p className="text-[10px] uppercase tracking-[0.12em] text-ink-muted">
+                  Model
+                </p>
+                <p className="mt-0.5 flex items-center justify-end gap-2 text-xs font-medium tracking-wide text-ink">
+                  <span className="max-w-[9rem] truncate">{model}</span>
+                  <span aria-hidden="true" className="text-ink-muted">
+                    {modelsOpen ? "›" : "‹"}
+                  </span>
+                </p>
+              </button>
+            </div>
           </div>
           <p className="mt-2.5 flex items-center gap-2 text-[11px] text-ink-muted">
             <span
