@@ -820,7 +820,7 @@ export function ModelSelector({
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <section className="border-b border-line px-4 py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -878,7 +878,7 @@ export function ModelSelector({
             </button>
           </div>
 
-          <div className="max-h-48 overflow-y-auto">
+          <div>
             {listError && (
               <p className="px-4 py-3 text-xs text-ink">{listError}</p>
             )}
@@ -905,7 +905,7 @@ export function ModelSelector({
                       aria-selected={isSelected}
                       disabled={disabled || removing}
                       onClick={() => onChange(entry.name)}
-                      className={`flex min-w-0 flex-1 flex-col justify-center gap-1 px-4 py-3 text-left transition disabled:opacity-40 ${
+                      className={`flex min-w-0 flex-1 flex-col justify-center gap-1 px-3 py-3 text-left transition disabled:opacity-40 sm:px-4 ${
                         isSelected ? "" : "hover:bg-hover"
                       }`}
                     >
@@ -922,7 +922,7 @@ export function ModelSelector({
                     </button>
                     <span
                       aria-hidden="true"
-                      className={`flex w-9 shrink-0 items-center justify-center border-l border-line ${
+                      className={`flex w-7 shrink-0 items-center justify-center border-l border-line sm:w-9 ${
                         isSelected ? "text-paper" : "text-transparent"
                       }`}
                     >
@@ -946,7 +946,7 @@ export function ModelSelector({
                       }}
                       aria-label={`Remove ${entry.name}`}
                       title="Remove from this machine"
-                      className={`shrink-0 border-l border-line px-3 text-[10px] font-medium uppercase tracking-wide transition disabled:opacity-40 ${
+                      className={`shrink-0 border-l border-line px-2 text-[10px] font-medium uppercase tracking-wide transition disabled:opacity-40 sm:px-3 ${
                         isSelected
                           ? "text-paper hover:bg-paper hover:text-ink"
                           : "text-ink-muted hover:bg-ink hover:text-paper"
@@ -961,7 +961,7 @@ export function ModelSelector({
           </div>
         </section>
 
-        <section className="flex min-h-0 flex-1 flex-col">
+        <section className="border-b border-line">
           <div className="border-b border-line px-4 py-4">
             <p className="text-[10px] uppercase tracking-wide text-ink-muted">
               Search Ollama library
@@ -988,7 +988,7 @@ export function ModelSelector({
             )}
           </div>
 
-          <div className="min-h-[12rem] flex-1 overflow-y-auto">
+          <div>
             {libraryError && (
               <p className="border-b border-line px-4 py-3 text-xs text-ink">
                 {libraryError}
@@ -1011,9 +1011,9 @@ export function ModelSelector({
                     key={entry.name}
                     className="border-b border-line last:border-b-0"
                   >
-                    <div className="flex items-start gap-3 px-4 py-3.5">
+                    <div className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-start">
                       <div className="min-w-0 flex-1">
-                        <div className="flex min-w-0 items-baseline justify-between gap-3">
+                        <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                           <p className="truncate text-sm font-medium uppercase tracking-wide text-ink">
                             {entry.name}
                           </p>
@@ -1052,7 +1052,7 @@ export function ModelSelector({
                             sizes: entry.sizes,
                           });
                         }}
-                        className="shrink-0 border border-line px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-wide text-ink transition hover:bg-ink hover:text-paper disabled:opacity-40"
+                        className="w-full shrink-0 border border-line px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-wide text-ink transition hover:bg-ink hover:text-paper disabled:opacity-40 sm:w-auto"
                       >
                         {installed ? "Pull again" : "Pull"}
                       </button>
@@ -1073,7 +1073,7 @@ export function ModelSelector({
             <p className="text-[10px] uppercase tracking-wide text-ink-muted">
               Pull by exact name
             </p>
-            <div className="mt-3 flex items-stretch">
+            <div className="mt-3 flex min-w-0 items-stretch">
               <input
                 type="text"
                 value={pullName}
@@ -1087,7 +1087,7 @@ export function ModelSelector({
                 disabled={
                   pulling || cancellingPull || disabled || !pullName.trim()
                 }
-                className="shrink-0 border border-line bg-ink px-4 text-xs font-medium uppercase tracking-wide text-paper transition hover:bg-paper hover:text-ink disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-ink disabled:hover:text-paper"
+                className="shrink-0 border border-line bg-ink px-3 text-xs font-medium uppercase tracking-wide text-paper transition hover:bg-paper hover:text-ink disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-ink disabled:hover:text-paper sm:px-4"
               >
                 Pull
               </button>
