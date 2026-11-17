@@ -123,6 +123,7 @@
     font-size: 0.9em;
     background: var(--color-surface);
     border: 1px solid var(--color-line);
+    border-radius: 0.35rem;
     padding: 0.05em 0.3em;
   }
 
@@ -130,8 +131,9 @@
     margin: 0.7em 0;
     overflow-x: auto;
     border: 1px solid var(--color-line);
+    border-radius: 0.75rem;
     padding: 0.75em 0.9em;
-    background: var(--color-surface);
+    background: var(--color-panel);
   }
 
   .markdown-body pre code {

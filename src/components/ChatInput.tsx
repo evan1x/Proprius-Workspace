@@ -32,7 +32,7 @@ export function ChatInput({ disabled = false, onSend }: ChatInputProps) {
       onSubmit={handleSubmit}
       className="border-t border-line bg-paper px-5 py-4 md:px-8"
     >
-      <div className="mx-auto flex w-full max-w-3xl items-stretch overflow-hidden border border-line bg-surface">
+      <div className="mx-auto flex w-full max-w-3xl items-stretch overflow-hidden rounded-2xl border border-line bg-surface">
         <label className="sr-only" htmlFor="prompt-input">
           Prompt
         </label>
