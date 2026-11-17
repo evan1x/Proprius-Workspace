@@ -17,6 +17,8 @@ export interface SuggestedInstallRequest {
 
 interface SettingsPanelProps {
   open: boolean;
+  /** Overlay the chat instead of taking flex space (narrow windows). */
+  overlay?: boolean;
   onClose: () => void;
   /** Opens the models panel and starts the pull confirm flow for this model. */
   onInstallSuggestion: (request: SuggestedInstallRequest) => void;
@@ -51,6 +53,7 @@ function isSuggestionInstalled(
 
 export function SettingsPanel({
   open,
+  overlay = false,
   onClose,
   onInstallSuggestion,
   installedModelNames = [],
@@ -132,7 +135,11 @@ export function SettingsPanel({
     <aside
       id="settings-side-panel"
       aria-label="Settings"
-      className="relative flex h-full w-[22rem] shrink-0 flex-col border-l border-line bg-panel md:w-[24rem]"
+      className={`flex h-full min-h-0 min-w-0 w-[min(24rem,100%)] flex-col overflow-hidden border-l border-line bg-panel ${
+        overlay
+          ? "absolute inset-y-0 right-0 z-30"
+          : "relative shrink-0"
+      }`}
     >
       <div className="flex items-start justify-between gap-3 border-b border-line px-4 py-3.5">
         <div className="min-w-0">

@@ -89,6 +89,8 @@ interface ModelSelectorProps {
   open: boolean;
   model: string;
   disabled?: boolean;
+  /** Overlay the chat instead of taking flex space (narrow windows). */
+  overlay?: boolean;
   onClose: () => void;
   onChange: (modelId: string) => void;
   onModelsChange?: (models: InstalledModel[]) => void;
@@ -101,6 +103,7 @@ export function ModelSelector({
   open,
   model,
   disabled = false,
+  overlay = false,
   onClose,
   onChange,
   onModelsChange,
@@ -277,12 +280,24 @@ export function ModelSelector({
   ]);
 
   useEffect(() => {
+    function handleWindowResize() {
+      const maxWidth = Math.max(PANEL_MIN_WIDTH, window.innerWidth - 16);
+      setPanelWidth((current) => Math.min(current, maxWidth));
+    }
+
+    window.addEventListener("resize", handleWindowResize);
+    return () => window.removeEventListener("resize", handleWindowResize);
+  }, []);
+
+  useEffect(() => {
     function handlePointerMove(event: PointerEvent) {
       const drag = resizeDragRef.current;
       if (!drag) return;
       // Left-edge drag: moving left widens the right-side panel.
-      const nextWidth = clampPanelWidth(
-        drag.startWidth + (drag.startX - event.clientX),
+      const maxWidth = Math.max(PANEL_MIN_WIDTH, window.innerWidth - 16);
+      const nextWidth = Math.min(
+        maxWidth,
+        clampPanelWidth(drag.startWidth + (drag.startX - event.clientX)),
       );
       setPanelWidth(nextWidth);
     }
@@ -551,16 +566,25 @@ export function ModelSelector({
   if (!open) return null;
 
   const showingSearch = libraryQuery.trim().length > 0;
+  const maxOverlayWidth =
+    typeof window === "undefined"
+      ? panelWidth
+      : Math.max(PANEL_MIN_WIDTH, window.innerWidth - 16);
+  const effectiveWidth = overlay
+    ? Math.min(panelWidth, maxOverlayWidth)
+    : panelWidth;
 
   return (
     <aside
       ref={panelRef}
       id="models-side-panel"
       aria-label="Manage Ollama models"
-      style={{ width: panelWidth }}
-      className={`relative flex h-full shrink-0 flex-col border-l border-line bg-panel ${
-        isResizing ? "select-none" : ""
-      }`}
+      style={{ width: effectiveWidth, maxWidth: overlay ? "100%" : undefined }}
+      className={`flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-l border-line bg-panel ${
+        overlay
+          ? "absolute inset-y-0 right-0 z-30 shadow-none"
+          : "relative shrink-0"
+      } ${isResizing ? "select-none" : ""}`}
     >
       <div
         role="separator"

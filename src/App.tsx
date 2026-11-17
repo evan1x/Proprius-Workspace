@@ -23,6 +23,11 @@ import {
 } from "./services/llm";
 import type { ChatMessage, Conversation } from "./types/chat";
 
+/** Below this width, Models/Settings overlay instead of splitting the chat. */
+const OVERLAY_PANELS_BELOW = 1100;
+/** Below this width, hide the conversations sidebar while a panel is open. */
+const HIDE_SIDEBAR_WITH_PANEL_BELOW = 900;
+
 function createMessage(role: ChatMessage["role"], content: string): ChatMessage {
   return {
     id: crypto.randomUUID(),
@@ -55,10 +60,27 @@ function App() {
   const [installedModels, setInstalledModels] = useState<InstalledModel[]>([]);
   const [externalPullRequest, setExternalPullRequest] =
     useState<ExternalPullRequest | null>(null);
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window === "undefined" ? OVERLAY_PANELS_BELOW : window.innerWidth,
+  );
 
   const activeConversation =
     conversations.find((conversation) => conversation.id === activeId) ?? null;
   const messages = activeConversation?.messages ?? [];
+  const sidePanelOpen = modelsOpen || settingsOpen;
+  const overlayPanels = viewportWidth < OVERLAY_PANELS_BELOW;
+  const hideSidebar =
+    sidePanelOpen && viewportWidth < HIDE_SIDEBAR_WITH_PANEL_BELOW;
+
+  useEffect(() => {
+    function handleResize() {
+      setViewportWidth(window.innerWidth);
+    }
+
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -297,11 +319,12 @@ function App() {
       : "Ollama offline";
 
   return (
-    <div className="flex h-full bg-paper">
+    <div className="relative flex h-full min-w-0 overflow-hidden bg-paper">
       <Sidebar
         conversations={conversations}
         activeId={activeId}
         settingsOpen={settingsOpen}
+        hidden={hideSidebar}
         onSelect={handleSelect}
         onNewChat={handleNewChat}
         onDelete={(id) => {
@@ -316,14 +339,14 @@ function App() {
         }}
       />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="border-b border-line bg-paper px-5 py-3.5">
-          <div className="flex items-center justify-between gap-4">
+      <div className="flex min-w-0 min-h-0 flex-1 flex-col">
+        <header className="border-b border-line bg-paper px-3 py-3 sm:px-5 sm:py-3.5">
+          <div className="flex items-center justify-between gap-2 sm:gap-4">
             <div className="min-w-0">
-              <h1 className="truncate text-lg font-semibold tracking-tight text-ink">
+              <h1 className="truncate text-base font-semibold tracking-tight text-ink sm:text-lg">
                 Proprius Workspace
               </h1>
-              <p className="mt-1 truncate text-sm text-ink-muted">
+              <p className="mt-1 truncate text-xs text-ink-muted sm:text-sm">
                 {isLoading
                   ? "Loading conversations…"
                   : activeConversation
@@ -331,13 +354,13 @@ function App() {
                     : "No conversation selected"}
               </p>
             </div>
-            <div className="flex shrink-0 items-stretch gap-2">
+            <div className="flex shrink-0 items-stretch gap-1.5 sm:gap-2">
               <button
                 type="button"
                 disabled
                 title="Model settings coming soon"
                 aria-label="Model settings (coming soon)"
-                className="border border-line bg-panel px-3 py-2 text-left opacity-50"
+                className="hidden border border-line bg-panel px-3 py-2 text-left opacity-50 sm:block"
               >
                 <p className="text-[10px] uppercase tracking-[0.12em] text-ink-muted">
                   Settings
@@ -358,13 +381,15 @@ function App() {
                     return next;
                   })
                 }
-                className="group border border-line bg-panel px-3 py-2 text-right transition hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40"
+                className="group border border-line bg-panel px-2.5 py-2 text-right transition hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40 sm:px-3"
               >
                 <p className="text-[10px] uppercase tracking-[0.12em] text-ink-muted">
                   Model
                 </p>
                 <p className="mt-0.5 flex items-center justify-end gap-2 text-xs font-medium tracking-wide text-ink">
-                  <span className="max-w-[9rem] truncate">{model}</span>
+                  <span className="max-w-[6.5rem] truncate sm:max-w-[9rem]">
+                    {model}
+                  </span>
                   <span aria-hidden="true" className="text-ink-muted">
                     {modelsOpen ? "›" : "‹"}
                   </span>
@@ -372,7 +397,7 @@ function App() {
               </button>
             </div>
           </div>
-          <p className="mt-2.5 flex items-center gap-2 text-[11px] text-ink-muted">
+          <p className="mt-2 flex items-center gap-2 text-[11px] text-ink-muted sm:mt-2.5">
             <span
               aria-hidden="true"
               className={`inline-block h-1.5 w-1.5 rounded-full ${
@@ -381,14 +406,14 @@ function App() {
                   : "bg-ink-muted"
               }`}
             />
-            {connectionLabel}
+            <span className="truncate">{connectionLabel}</span>
           </p>
         </header>
 
         <ChatWindow messages={messages} isGenerating={isGenerating} />
 
         {error && (
-          <div className="px-5 pb-2 md:px-8">
+          <div className="px-3 pb-2 sm:px-5 md:px-8">
             <p className="mx-auto max-w-3xl border border-line bg-surface px-3 py-2 text-sm text-ink">
               {error}
             </p>
@@ -401,10 +426,23 @@ function App() {
         />
       </div>
 
+      {overlayPanels && sidePanelOpen && (
+        <button
+          type="button"
+          aria-label="Close side panel"
+          className="absolute inset-0 z-20 bg-paper/60"
+          onClick={() => {
+            setModelsOpen(false);
+            setSettingsOpen(false);
+          }}
+        />
+      )}
+
       <ModelSelector
         open={modelsOpen}
         model={model}
         disabled={isGenerating || isLoading}
+        overlay={overlayPanels}
         onClose={() => setModelsOpen(false)}
         onChange={setModel}
         externalPullRequest={externalPullRequest}
@@ -422,6 +460,7 @@ function App() {
 
       <SettingsPanel
         open={settingsOpen}
+        overlay={overlayPanels}
         onClose={() => setSettingsOpen(false)}
         installedModelNames={installedModels.map((entry) => entry.name)}
         onInstallSuggestion={(request) => {

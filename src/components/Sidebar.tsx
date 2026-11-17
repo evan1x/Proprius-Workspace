@@ -35,6 +35,8 @@ interface SidebarProps {
   conversations: Conversation[];
   activeId: string | null;
   settingsOpen?: boolean;
+  /** Hide entirely (used on narrow windows while a side panel is open). */
+  hidden?: boolean;
   onSelect: (id: string) => void;
   onNewChat: () => void;
   onDelete: (id: string) => void;
@@ -55,6 +57,7 @@ export function Sidebar({
   conversations,
   activeId,
   settingsOpen = false,
+  hidden = false,
   onSelect,
   onNewChat,
   onDelete,
@@ -99,12 +102,29 @@ export function Sidebar({
   }, [menuOpenId]);
 
   useEffect(() => {
+    function handleWindowResize() {
+      const maxWidth = Math.max(
+        SIDEBAR_MIN_WIDTH,
+        Math.floor(window.innerWidth * 0.42),
+      );
+      setSidebarWidth((current) =>
+        Math.min(current, Math.min(SIDEBAR_MAX_WIDTH, maxWidth)),
+      );
+    }
+
+    window.addEventListener("resize", handleWindowResize);
+    return () => window.removeEventListener("resize", handleWindowResize);
+  }, []);
+
+  useEffect(() => {
     function handlePointerMove(event: PointerEvent) {
       const drag = resizeDragRef.current;
       if (!drag) return;
       // Right-edge drag: moving right widens the left sidebar.
-      const nextWidth = clampSidebarWidth(
-        drag.startWidth + (event.clientX - drag.startX),
+      const viewportCap = Math.floor(window.innerWidth * 0.42);
+      const nextWidth = Math.min(
+        viewportCap,
+        clampSidebarWidth(drag.startWidth + (event.clientX - drag.startX)),
       );
       setSidebarWidth(nextWidth);
     }
@@ -163,10 +183,12 @@ export function Sidebar({
     });
   }
 
+  if (hidden) return null;
+
   return (
     <aside
-      style={{ width: sidebarWidth }}
-      className={`relative flex h-full shrink-0 flex-col border-r border-line bg-panel ${
+      style={{ width: sidebarWidth, maxWidth: "42vw" }}
+      className={`relative flex h-full min-w-0 shrink-0 flex-col border-r border-line bg-panel ${
         isResizing ? "select-none" : ""
       }`}
     >
