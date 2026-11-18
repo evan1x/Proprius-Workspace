@@ -237,10 +237,11 @@ fn open_system_terminal() -> std::io::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let migrations = vec![Migration {
-        version: 1,
-        description: "create_conversations_and_messages",
-        sql: r#"
+    let migrations = vec![
+        Migration {
+            version: 1,
+            description: "create_conversations_and_messages",
+            sql: r#"
             CREATE TABLE IF NOT EXISTS conversations (
               id TEXT PRIMARY KEY NOT NULL,
               title TEXT NOT NULL,
@@ -262,8 +263,17 @@ pub fn run() {
             CREATE INDEX IF NOT EXISTS idx_conversations_updated_at
               ON conversations(updated_at DESC);
         "#,
-        kind: MigrationKind::Up,
-    }];
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 2,
+            description: "add_message_attachments_json",
+            sql: r#"
+            ALTER TABLE messages ADD COLUMN attachments_json TEXT;
+        "#,
+            kind: MigrationKind::Up,
+        },
+    ];
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())

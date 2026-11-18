@@ -61,6 +61,8 @@ export interface ModelTagOption {
 interface OllamaChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
+  /** Base64 image payloads for multimodal / vision models. */
+  images?: string[];
 }
 
 interface OllamaChatResponse {
@@ -87,13 +89,61 @@ interface OllamaPullEvent {
   error?: string;
 }
 
+function buildMessageContent(message: ChatMessage): {
+  content: string;
+  images: string[];
+} {
+  const attachments = message.attachments ?? [];
+  const parts: string[] = [];
+  const images: string[] = [];
+
+  if (message.content.trim()) {
+    parts.push(message.content.trim());
+  }
+
+  for (const attachment of attachments) {
+    if (attachment.kind === "image" && attachment.dataBase64) {
+      images.push(attachment.dataBase64);
+      parts.push(`[Attached image: ${attachment.name}]`);
+      continue;
+    }
+
+    if (attachment.textContent?.trim()) {
+      parts.push(
+        [
+          `--- Attached file: ${attachment.name} (${attachment.mimeType}) ---`,
+          attachment.textContent.trim(),
+          `--- End of ${attachment.name} ---`,
+        ].join("\n"),
+      );
+      continue;
+    }
+
+    parts.push(
+      `[Attached file: ${attachment.name} (${attachment.mimeType}, ${attachment.size} bytes) — content could not be extracted.]`,
+    );
+  }
+
+  return {
+    content: parts.join("\n\n") || "(No text content.)",
+    images,
+  };
+}
+
 function toOllamaMessages(messages: ChatMessage[]): OllamaChatMessage[] {
   return messages
     .filter((message) => message.role === "user" || message.role === "assistant")
-    .map((message) => ({
-      role: message.role as "user" | "assistant",
-      content: message.content,
-    }));
+    .map((message) => {
+      const { content, images } = buildMessageContent(message);
+      const payload: OllamaChatMessage = {
+        role: message.role as "user" | "assistant",
+        content,
+      };
+      if (images.length > 0) {
+        payload.images = images;
+      }
+      return payload;
+    });
 }
 
 export function formatModelSize(bytes: number): string {
@@ -695,6 +745,8 @@ export async function generateResponse(
 
     if (response.status === 404) {
       detail = `Model "${model}" was not found. Run: ollama pull ${model}`;
+    } else if (/image|vision|multimodal/i.test(detail)) {
+      detail = `${detail} Try a vision-capable model (for example llava) for image attachments.`;
     }
 
     throw new Error(detail);

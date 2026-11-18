@@ -1,5 +1,10 @@
 import Database from "@tauri-apps/plugin-sql";
-import type { ChatMessage, Conversation, MessageRole } from "../types/chat";
+import type {
+  ChatAttachment,
+  ChatMessage,
+  Conversation,
+  MessageRole,
+} from "../types/chat";
 
 const DB_URL = "sqlite:proprius.db";
 
@@ -15,6 +20,7 @@ interface MessageRow {
   role: string;
   content: string;
   created_at: number;
+  attachments_json?: string | null;
 }
 
 let dbPromise: Promise<Database> | null = null;
@@ -35,12 +41,25 @@ export function createEmptyConversation(): Conversation {
   };
 }
 
+function parseAttachments(raw: string | null | undefined): ChatAttachment[] | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed) || parsed.length === 0) return undefined;
+    return parsed as ChatAttachment[];
+  } catch {
+    return undefined;
+  }
+}
+
 function mapMessage(row: MessageRow): ChatMessage {
+  const attachments = parseAttachments(row.attachments_json);
   return {
     id: row.id,
     role: row.role as MessageRole,
     content: row.content,
     createdAt: row.created_at,
+    ...(attachments ? { attachments } : {}),
   };
 }
 
@@ -58,7 +77,7 @@ export async function listConversations(): Promise<Conversation[]> {
   }
 
   const messageRows = await db.select<MessageRow[]>(
-    `SELECT id, conversation_id, role, content, created_at
+    `SELECT id, conversation_id, role, content, created_at, attachments_json
      FROM messages
      ORDER BY created_at ASC`,
   );
@@ -106,6 +125,10 @@ export async function saveMessage(
 ): Promise<void> {
   const db = await getDb();
   const updatedAt = Math.max(message.createdAt, Date.now());
+  const attachmentsJson =
+    message.attachments && message.attachments.length > 0
+      ? JSON.stringify(message.attachments)
+      : null;
 
   if (title !== undefined) {
     await db.execute(
@@ -127,18 +150,20 @@ export async function saveMessage(
   }
 
   await db.execute(
-    `INSERT INTO messages (id, conversation_id, role, content, created_at)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO messages (id, conversation_id, role, content, created_at, attachments_json)
+     VALUES ($1, $2, $3, $4, $5, $6)
      ON CONFLICT(id) DO UPDATE SET
        content = excluded.content,
        role = excluded.role,
-       created_at = excluded.created_at`,
+       created_at = excluded.created_at,
+       attachments_json = excluded.attachments_json`,
     [
       message.id,
       conversationId,
       message.role,
       message.content,
       message.createdAt,
+      attachmentsJson,
     ],
   );
 }

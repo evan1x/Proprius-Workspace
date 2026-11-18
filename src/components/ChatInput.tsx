@@ -1,18 +1,80 @@
-import { useState, type FormEvent, type KeyboardEvent } from "react";
+import {
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
+import {
+  formatAttachmentSize,
+  MAX_ATTACHMENTS,
+  readFileAsAttachment,
+} from "../services/attachments";
+import type { ChatAttachment } from "../types/chat";
 
 interface ChatInputProps {
   disabled?: boolean;
-  onSend: (prompt: string) => void;
+  onSend: (prompt: string, attachments: ChatAttachment[]) => void;
 }
 
 export function ChatInput({ disabled = false, onSend }: ChatInputProps) {
   const [value, setValue] = useState("");
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const [readingFiles, setReadingFiles] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const canSend =
+    !disabled &&
+    !readingFiles &&
+    (value.trim().length > 0 || attachments.length > 0);
+
+  async function addFiles(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+
+    setAttachError(null);
+    const remaining = MAX_ATTACHMENTS - attachments.length;
+    if (remaining <= 0) {
+      setAttachError(`You can attach up to ${MAX_ATTACHMENTS} files per message.`);
+      return;
+    }
+
+    const selected = Array.from(fileList).slice(0, remaining);
+    setReadingFiles(true);
+    try {
+      const next: ChatAttachment[] = [];
+      for (const file of selected) {
+        next.push(await readFileAsAttachment(file));
+      }
+      setAttachments((current) => [...current, ...next]);
+      if (fileList.length > remaining) {
+        setAttachError(
+          `Only ${MAX_ATTACHMENTS} files allowed — extra files were skipped.`,
+        );
+      }
+    } catch (err) {
+      setAttachError(
+        err instanceof Error ? err.message : "Failed to read attachment.",
+      );
+    } finally {
+      setReadingFiles(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  function removeAttachment(id: string) {
+    setAttachments((current) => current.filter((item) => item.id !== id));
+  }
 
   function submit() {
     const prompt = value.trim();
-    if (!prompt || disabled) return;
-    onSend(prompt);
+    if (disabled || readingFiles) return;
+    if (!prompt && attachments.length === 0) return;
+
+    onSend(prompt, attachments);
     setValue("");
+    setAttachments([]);
+    setAttachError(null);
   }
 
   function handleSubmit(event: FormEvent) {
@@ -27,50 +89,104 @@ export function ChatInput({ disabled = false, onSend }: ChatInputProps) {
     }
   }
 
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    void addFiles(event.target.files);
+  }
+
   return (
     <form
       onSubmit={handleSubmit}
       className="border-t border-line bg-paper px-3 py-3 sm:px-5 sm:py-4 md:px-8"
     >
-      <div className="mx-auto flex w-full max-w-3xl items-stretch overflow-hidden rounded-2xl border border-line bg-surface">
-        <label className="sr-only" htmlFor="prompt-input">
-          Prompt
-        </label>
-        <textarea
-          id="prompt-input"
-          rows={2}
-          value={value}
-          disabled={disabled}
-          onChange={(event) => setValue(event.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Write a prompt… (Enter to send)"
-          className="min-h-[3.25rem] flex-1 resize-none border-0 bg-transparent px-3.5 py-2.5 text-[15px] text-ink outline-none placeholder:text-ink-muted focus-visible:outline-none disabled:opacity-50"
-        />
-        <button
-          type="button"
-          disabled
-          title="File attachments coming soon"
-          aria-label="Attach file (coming soon)"
-          className="shrink-0 border-l border-line px-3 text-ink-muted opacity-50"
-        >
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 16 16"
-            className="h-4 w-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
+      <div className="mx-auto w-full max-w-3xl">
+        {(attachments.length > 0 || attachError) && (
+          <div className="mb-2 space-y-2">
+            {attachments.length > 0 && (
+              <ul className="flex flex-wrap gap-2">
+                {attachments.map((attachment) => (
+                  <li
+                    key={attachment.id}
+                    className="flex max-w-full items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 text-xs text-ink"
+                  >
+                    <span className="min-w-0 truncate">
+                      {attachment.name}
+                      <span className="text-ink-muted">
+                        {" "}
+                        · {formatAttachmentSize(attachment.size)}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      disabled={disabled || readingFiles}
+                      onClick={() => removeAttachment(attachment.id)}
+                      aria-label={`Remove ${attachment.name}`}
+                      className="shrink-0 text-ink-muted transition hover:text-ink disabled:opacity-40"
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {attachError && (
+              <p className="text-xs text-ink-muted">{attachError}</p>
+            )}
+          </div>
+        )}
+
+        <div className="flex w-full items-stretch overflow-hidden rounded-2xl border border-line bg-surface">
+          <label className="sr-only" htmlFor="prompt-input">
+            Prompt
+          </label>
+          <textarea
+            id="prompt-input"
+            rows={2}
+            value={value}
+            disabled={disabled || readingFiles}
+            onChange={(event) => setValue(event.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={
+              attachments.length > 0
+                ? "Add a prompt for the attached file(s)… (Enter to send)"
+                : "Write a prompt… (Enter to send)"
+            }
+            className="min-h-[3.25rem] flex-1 resize-none border-0 bg-transparent px-3.5 py-2.5 text-[15px] text-ink outline-none placeholder:text-ink-muted focus-visible:outline-none disabled:opacity-50"
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={handleFileChange}
+            disabled={disabled || readingFiles}
+          />
+          <button
+            type="button"
+            disabled={disabled || readingFiles || attachments.length >= MAX_ATTACHMENTS}
+            title="Attach files"
+            aria-label="Attach files"
+            onClick={() => fileInputRef.current?.click()}
+            className="shrink-0 border-l border-line px-3 text-ink transition hover:bg-hover disabled:cursor-not-allowed disabled:text-ink-muted disabled:opacity-50"
           >
-            <path d="M8.5 3.5v6.25a2.25 2.25 0 1 1-4.5 0V4.75a1.25 1.25 0 1 1 2.5 0v4.5" />
-          </svg>
-        </button>
-        <button
-          type="submit"
-          disabled={disabled || !value.trim()}
-          className="shrink-0 border-l border-line bg-ink px-5 text-sm font-medium tracking-wide text-paper transition hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:bg-surface disabled:text-ink-muted disabled:opacity-60"
-        >
-          Send
-        </button>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 16 16"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
+              <path d="M8.5 3.5v6.25a2.25 2.25 0 1 1-4.5 0V4.75a1.25 1.25 0 1 1 2.5 0v4.5" />
+            </svg>
+          </button>
+          <button
+            type="submit"
+            disabled={!canSend}
+            className="shrink-0 border-l border-line bg-ink px-5 text-sm font-medium tracking-wide text-paper transition hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:bg-surface disabled:text-ink-muted disabled:opacity-60"
+          >
+            {readingFiles ? "…" : "Send"}
+          </button>
+        </div>
       </div>
     </form>
   );

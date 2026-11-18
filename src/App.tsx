@@ -21,26 +21,40 @@ import {
   type InstalledModel,
   type OllamaStatus,
 } from "./services/llm";
-import type { ChatMessage, Conversation } from "./types/chat";
+import type {
+  ChatAttachment,
+  ChatMessage,
+  Conversation,
+} from "./types/chat";
 
 /** Below this width, Models/Settings overlay instead of splitting the chat. */
 const OVERLAY_PANELS_BELOW = 1100;
 /** Below this width, hide the conversations sidebar while a panel is open. */
 const HIDE_SIDEBAR_WITH_PANEL_BELOW = 900;
 
-function createMessage(role: ChatMessage["role"], content: string): ChatMessage {
+function createMessage(
+  role: ChatMessage["role"],
+  content: string,
+  attachments?: ChatAttachment[],
+): ChatMessage {
   return {
     id: crypto.randomUUID(),
     role,
     content,
     createdAt: Date.now(),
+    ...(attachments && attachments.length > 0 ? { attachments } : {}),
   };
 }
 
-function titleFromPrompt(prompt: string): string {
+function titleFromPrompt(prompt: string, attachments: ChatAttachment[]): string {
   const trimmed = prompt.trim().replace(/\s+/g, " ");
-  if (trimmed.length <= 42) return trimmed;
-  return `${trimmed.slice(0, 42).trimEnd()}…`;
+  if (trimmed) {
+    if (trimmed.length <= 42) return trimmed;
+    return `${trimmed.slice(0, 42).trimEnd()}…`;
+  }
+  if (attachments.length === 1) return attachments[0].name;
+  if (attachments.length > 1) return `${attachments.length} attachments`;
+  return "New chat";
 }
 
 function sortByUpdatedAt(conversations: Conversation[]): Conversation[] {
@@ -223,8 +237,11 @@ function App() {
     }
   }
 
-  async function handleSend(prompt: string) {
+  async function handleSend(prompt: string, attachments: ChatAttachment[] = []) {
     setError(null);
+
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt && attachments.length === 0) return;
 
     let conversationId = activeId;
     let priorMessages: ChatMessage[] = [];
@@ -244,11 +261,17 @@ function App() {
       currentTitle = existing?.title ?? "New chat";
     }
 
-    const userMessage = createMessage("user", prompt);
+    const contentForModel =
+      trimmedPrompt ||
+      (attachments.length === 1
+        ? `Please analyze the attached file "${attachments[0].name}" and respond helpfully.`
+        : "Please analyze the attached files and respond helpfully.");
+
+    const userMessage = createMessage("user", contentForModel, attachments);
     const nextMessages = [...priorMessages, userMessage];
     const isFirstMessage = priorMessages.length === 0;
     const nextTitle = isFirstMessage
-      ? titleFromPrompt(prompt)
+      ? titleFromPrompt(trimmedPrompt, attachments)
       : currentTitle;
     const updatedAt = Date.now();
 
