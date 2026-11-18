@@ -261,13 +261,7 @@ function App() {
       currentTitle = existing?.title ?? "New chat";
     }
 
-    const contentForModel =
-      trimmedPrompt ||
-      (attachments.length === 1
-        ? `Please analyze the attached file "${attachments[0].name}" and respond helpfully.`
-        : "Please analyze the attached files and respond helpfully.");
-
-    const userMessage = createMessage("user", contentForModel, attachments);
+    const userMessage = createMessage("user", trimmedPrompt, attachments);
     const nextMessages = [...priorMessages, userMessage];
     const isFirstMessage = priorMessages.length === 0;
     const nextTitle = isFirstMessage

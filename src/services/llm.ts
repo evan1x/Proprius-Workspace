@@ -97,7 +97,8 @@ function buildMessageContent(message: ChatMessage): {
   const parts: string[] = [];
   const images: string[] = [];
 
-  if (message.content.trim()) {
+  const hasPrompt = Boolean(message.content.trim());
+  if (hasPrompt) {
     parts.push(message.content.trim());
   }
 
@@ -122,6 +123,11 @@ function buildMessageContent(message: ChatMessage): {
     parts.push(
       `[Attached file: ${attachment.name} (${attachment.mimeType}, ${attachment.size} bytes) — content could not be extracted.]`,
     );
+  }
+
+  // Model-only fallback when the user sends attachments without typing a prompt.
+  if (!hasPrompt && attachments.length > 0) {
+    parts.unshift("Please analyze the attached file(s) and respond helpfully.");
   }
 
   return {
