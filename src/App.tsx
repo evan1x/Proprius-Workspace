@@ -1,12 +1,18 @@
-import { useEffect, useState } from "react";
-import { ChatInput } from "./components/ChatInput";
+import { useEffect, useRef, useState, type DragEvent } from "react";
+import { ChatInput, type ChatInputHandle } from "./components/ChatInput";
 import { ChatWindow } from "./components/ChatWindow";
+import { ModelParametersPanel } from "./components/ModelParametersPanel";
 import {
   ModelSelector,
   type ExternalPullRequest,
 } from "./components/ModelSelector";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { Sidebar } from "./components/Sidebar";
+import {
+  loadModelParameters,
+  saveModelParameters,
+  type ModelParameters,
+} from "./types/modelParams";
 import {
   createEmptyConversation,
   deleteConversation,
@@ -71,17 +77,24 @@ function App() {
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
   const [modelsOpen, setModelsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [parametersOpen, setParametersOpen] = useState(false);
+  const [modelParameters, setModelParameters] = useState<ModelParameters>(
+    loadModelParameters,
+  );
   const [installedModels, setInstalledModels] = useState<InstalledModel[]>([]);
   const [externalPullRequest, setExternalPullRequest] =
     useState<ExternalPullRequest | null>(null);
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window === "undefined" ? OVERLAY_PANELS_BELOW : window.innerWidth,
   );
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const chatInputRef = useRef<ChatInputHandle | null>(null);
+  const dragDepthRef = useRef(0);
 
   const activeConversation =
     conversations.find((conversation) => conversation.id === activeId) ?? null;
   const messages = activeConversation?.messages ?? [];
-  const sidePanelOpen = modelsOpen || settingsOpen;
+  const sidePanelOpen = modelsOpen || settingsOpen || parametersOpen;
   const overlayPanels = viewportWidth < OVERLAY_PANELS_BELOW;
   const hideSidebar =
     sidePanelOpen && viewportWidth < HIDE_SIDEBAR_WITH_PANEL_BELOW;
@@ -95,6 +108,48 @@ function App() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  function hasFilePayload(event: DragEvent) {
+    const types = event.dataTransfer?.types;
+    if (!types) return false;
+    return Array.from(types).some(
+      (type) => type === "Files" || type === "application/x-moz-file",
+    );
+  }
+
+  function handleChatDragEnter(event: DragEvent<HTMLDivElement>) {
+    if (!hasFilePayload(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepthRef.current += 1;
+    if (chatInputRef.current?.canAcceptFiles()) {
+      setIsDraggingFiles(true);
+    }
+  }
+
+  function handleChatDragLeave(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setIsDraggingFiles(false);
+  }
+
+  function handleChatDragOver(event: DragEvent<HTMLDivElement>) {
+    if (!hasFilePayload(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const canAccept = chatInputRef.current?.canAcceptFiles() ?? false;
+    event.dataTransfer.dropEffect = canAccept ? "copy" : "none";
+    if (canAccept) setIsDraggingFiles(true);
+  }
+
+  function handleChatDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepthRef.current = 0;
+    setIsDraggingFiles(false);
+    void chatInputRef.current?.addFiles(event.dataTransfer.files);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -296,7 +351,11 @@ function App() {
     setIsGenerating(true);
 
     try {
-      const reply = await generateResponse(nextMessages, model);
+      const reply = await generateResponse(
+        nextMessages,
+        model,
+        modelParameters,
+      );
       const assistantMessage = createMessage("assistant", reply);
       const assistantUpdatedAt = Date.now();
 
@@ -350,13 +409,30 @@ function App() {
         onOpenSettings={() => {
           setSettingsOpen((current) => {
             const next = !current;
-            if (next) setModelsOpen(false);
+            if (next) {
+              setModelsOpen(false);
+              setParametersOpen(false);
+            }
             return next;
           });
         }}
       />
 
-      <div className="flex min-w-0 min-h-0 flex-1 flex-col">
+      <div
+        className="relative flex min-h-0 min-w-0 flex-1 flex-col"
+        onDragEnter={handleChatDragEnter}
+        onDragLeave={handleChatDragLeave}
+        onDragOver={handleChatDragOver}
+        onDrop={handleChatDrop}
+      >
+        {isDraggingFiles && (
+          <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center border-2 border-dashed border-ink bg-paper/80">
+            <p className="rounded-full border border-line bg-surface px-4 py-2 text-sm font-medium text-ink">
+              Drop files to attach
+            </p>
+          </div>
+        )}
+
         <header className="border-b border-line bg-paper px-3 py-3 sm:px-5 sm:py-3.5">
           <div className="flex items-center justify-between gap-2 sm:gap-4">
             <div className="min-w-0">
@@ -374,15 +450,39 @@ function App() {
             <div className="flex shrink-0 items-stretch gap-1.5 sm:gap-2">
               <button
                 type="button"
-                disabled
-                title="Model settings coming soon"
-                aria-label="Model settings (coming soon)"
-                className="hidden border border-line bg-panel px-3 py-2 text-left opacity-50 sm:block"
+                disabled={isGenerating || isLoading}
+                title="Model parameters"
+                aria-label="Model parameters"
+                aria-expanded={parametersOpen}
+                aria-controls="model-parameters-panel"
+                onClick={() =>
+                  setParametersOpen((current) => {
+                    const next = !current;
+                    if (next) {
+                      setModelsOpen(false);
+                      setSettingsOpen(false);
+                    }
+                    return next;
+                  })
+                }
+                className={`hidden border border-line px-3 py-2 text-left transition sm:block disabled:cursor-not-allowed disabled:opacity-40 ${
+                  parametersOpen
+                    ? "bg-ink text-paper"
+                    : "bg-panel text-ink hover:bg-hover"
+                }`}
               >
-                <p className="text-[10px] uppercase tracking-[0.12em] text-ink-muted">
+                <p
+                  className={`text-[10px] uppercase tracking-[0.12em] ${
+                    parametersOpen ? "text-paper/70" : "text-ink-muted"
+                  }`}
+                >
                   Settings
                 </p>
-                <p className="mt-0.5 text-xs font-medium tracking-wide text-ink-muted">
+                <p
+                  className={`mt-0.5 text-xs font-medium tracking-wide ${
+                    parametersOpen ? "text-paper" : "text-ink"
+                  }`}
+                >
                   Parameters
                 </p>
               </button>
@@ -394,7 +494,10 @@ function App() {
                 onClick={() =>
                   setModelsOpen((current) => {
                     const next = !current;
-                    if (next) setSettingsOpen(false);
+                    if (next) {
+                      setSettingsOpen(false);
+                      setParametersOpen(false);
+                    }
                     return next;
                   })
                 }
@@ -438,6 +541,7 @@ function App() {
         )}
 
         <ChatInput
+          ref={chatInputRef}
           disabled={isGenerating || isLoading}
           onSend={handleSend}
         />
@@ -451,6 +555,7 @@ function App() {
           onClick={() => {
             setModelsOpen(false);
             setSettingsOpen(false);
+            setParametersOpen(false);
           }}
         />
       )}
@@ -475,6 +580,19 @@ function App() {
         }}
       />
 
+      <ModelParametersPanel
+        open={parametersOpen}
+        overlay={overlayPanels}
+        model={model}
+        value={modelParameters}
+        disabled={isGenerating || isLoading}
+        onChange={(next) => {
+          setModelParameters(next);
+          saveModelParameters(next);
+        }}
+        onClose={() => setParametersOpen(false)}
+      />
+
       <SettingsPanel
         open={settingsOpen}
         overlay={overlayPanels}
@@ -482,6 +600,7 @@ function App() {
         installedModelNames={installedModels.map((entry) => entry.name)}
         onInstallSuggestion={(request) => {
           setSettingsOpen(false);
+          setParametersOpen(false);
           setModelsOpen(true);
           setExternalPullRequest({
             name: request.name,

@@ -1,6 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { homeDir, join } from "@tauri-apps/api/path";
 import type { ChatMessage } from "../types/chat";
+import {
+  toOllamaOptions,
+  type ModelParameters,
+} from "../types/modelParams";
 
 export const OLLAMA_BASE_URL = "http://localhost:11434";
 export const DEFAULT_MODEL = "llama3.2:3b";
@@ -720,12 +724,31 @@ export async function checkOllamaStatus(
 export async function generateResponse(
   messages: ChatMessage[],
   model: string = DEFAULT_MODEL,
+  parameters?: ModelParameters,
 ): Promise<string> {
-  const payload = {
+  const chatMessages = toOllamaMessages(messages);
+  const systemPrompt = parameters?.systemPrompt?.trim();
+  if (systemPrompt) {
+    chatMessages.unshift({
+      role: "system",
+      content: systemPrompt,
+    });
+  }
+
+  const payload: {
+    model: string;
+    stream: boolean;
+    messages: OllamaChatMessage[];
+    options?: Record<string, number>;
+  } = {
     model,
     stream: false,
-    messages: toOllamaMessages(messages),
+    messages: chatMessages,
   };
+
+  if (parameters) {
+    payload.options = toOllamaOptions(parameters);
+  }
 
   let response: Response;
   try {
