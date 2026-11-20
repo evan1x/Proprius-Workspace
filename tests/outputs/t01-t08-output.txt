@@ -1,0 +1,56 @@
+t01-t08 full results:
+2026-11-20
+
+PS C:\Users\evann\Documents\Proprius-Workspace> powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\run-t01-t08.ps1 
+Proprius test run T-01..T-08
+Model: llama3.2:3b
+Ollama: http://localhost:11434
+Ollama OK; model present. Installed: 5
+
+=== T-01 Prompt submission : PASS ===
+Response: The answer is 4.
+
+=== T-02 Input validation : PASS ===
+whitespace-only: expect=False actual=False OK
+empty: expect=False actual=False OK
+text-only: expect=True actual=True OK
+attachments-only: expect=True actual=True OK
+disabled: expect=False actual=False OK
+reading-files: expect=False actual=False OK
+
+=== T-03 Model response : PASS ===
+Response: The answer is 4.
+
+=== T-04 Error handling : PASS ===
+Connection failure caught: Unable to connect to the remote server
+
+=== T-05 Sequential requests : PASS ===
+Request 1 PROMPT=Reply with exactly: ONE RESPONSE=ONE
+Request 2 PROMPT=Reply with exactly: TWO RESPONSE=TWO
+Request 3 PROMPT=Reply with exactly: THREE RESPONSE=THREE
+
+=== T-06 Parameters + system prompt : PASS ===
+options+system accepted. Response: Hello! How can I assist you today?
+
+=== T-07 Image chat : PASS ===
+Model=llava:7b Response:  The image shows a large red square with a white background. 
+
+=== T-08 Offline status : PASS ===
+tags: failure caught (Unable to connect to the remote server)
+chat: failure caught (Unable to connect to the remote server)
+
+========== SUMMARY ==========
+
+Id   Name                       Status Detail
+--   ----                       ------ ------
+T-01 Prompt submission          PASS   Response: The answer is 4.
+T-02 Input validation           PASS   whitespace-only: expect=False actual=False OK...
+T-03 Model response             PASS   Response: The answer is 4.
+T-04 Error handling             PASS   Connection failure caught: Unable to connect to the remote server
+T-05 Sequential requests        PASS   Request 1 PROMPT=Reply with exactly: ONE RESPONSE=ONE...
+T-06 Parameters + system prompt PASS   options+system accepted. Response: Hello! How can I assist you today?
+T-07 Image chat                 PASS   Model=llava:7b Response:  The image shows a large red square with a white background.
+T-08 Offline status             PASS   tags: failure caught (Unable to connect to the remote server)...
+
+
+Passed: 8  Failed: 0  Skipped: 0  Total: 8
