@@ -8,9 +8,30 @@ import {
 import type { Conversation } from "../types/chat";
 
 const SIDEBAR_WIDTH_STORAGE_KEY = "proprius.conversationsSidebarWidth";
+const SIDEBAR_COLLAPSED_STORAGE_KEY = "proprius.conversationsSidebarCollapsed";
 const SIDEBAR_MIN_WIDTH = 200;
 const SIDEBAR_MAX_WIDTH = 480;
 const SIDEBAR_DEFAULT_WIDTH = 256;
+const SIDEBAR_COLLAPSED_WIDTH = 52;
+
+export function readSidebarCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function saveSidebarCollapsed(collapsed: boolean): void {
+  try {
+    window.localStorage.setItem(
+      SIDEBAR_COLLAPSED_STORAGE_KEY,
+      collapsed ? "1" : "0",
+    );
+  } catch {
+    // ignore storage failures
+  }
+}
 
 function clampSidebarWidth(width: number): number {
   return Math.min(
@@ -35,12 +56,14 @@ interface SidebarProps {
   conversations: Conversation[];
   activeId: string | null;
   settingsOpen?: boolean;
+  collapsed?: boolean;
   /** Hide entirely (used on narrow windows while a side panel is open). */
   hidden?: boolean;
   onSelect: (id: string) => void;
   onNewChat: () => void;
   onDelete: (id: string) => void;
   onOpenSettings?: () => void;
+  onToggleCollapse?: () => void;
 }
 
 function formatUpdatedAt(timestamp: number): string {
@@ -57,11 +80,13 @@ export function Sidebar({
   conversations,
   activeId,
   settingsOpen = false,
+  collapsed = false,
   hidden = false,
   onSelect,
   onNewChat,
   onDelete,
   onOpenSettings,
+  onToggleCollapse,
 }: SidebarProps) {
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
@@ -156,6 +181,7 @@ export function Sidebar({
   }, []);
 
   function handleResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (collapsed) return;
     event.preventDefault();
     event.stopPropagation();
     resizeDragRef.current = {
@@ -168,6 +194,7 @@ export function Sidebar({
   }
 
   function handleResizeKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (collapsed) return;
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
     const delta = event.key === "ArrowRight" ? 16 : -16;
@@ -184,6 +211,57 @@ export function Sidebar({
   }
 
   if (hidden) return null;
+
+  if (collapsed) {
+    return (
+      <aside
+        style={{ width: SIDEBAR_COLLAPSED_WIDTH }}
+        className="relative flex h-full shrink-0 flex-col items-center border-r border-line bg-panel"
+      >
+        <div className="flex w-full flex-col items-center gap-2 border-b border-line px-2 py-3">
+          <button
+            type="button"
+            title="Expand conversations"
+            aria-label="Expand conversations panel"
+            aria-expanded={false}
+            onClick={onToggleCollapse}
+            className="flex h-8 w-8 items-center justify-center border border-line bg-surface text-sm text-ink transition hover:bg-hover"
+          >
+            ›
+          </button>
+          <button
+            type="button"
+            title="New chat"
+            aria-label="New chat"
+            onClick={onNewChat}
+            className="flex h-8 w-8 items-center justify-center border border-line bg-surface text-base font-medium leading-none text-ink transition hover:bg-hover"
+          >
+            +
+          </button>
+        </div>
+
+        <div className="flex-1" />
+
+        <div className="border-t border-line px-2 py-3">
+          <button
+            type="button"
+            title="Settings"
+            aria-label="Settings"
+            aria-expanded={settingsOpen}
+            aria-controls="settings-side-panel"
+            onClick={onOpenSettings}
+            className={`flex h-8 w-8 items-center justify-center border border-line text-[10px] font-medium uppercase tracking-wide transition ${
+              settingsOpen
+                ? "bg-ink text-panel"
+                : "bg-surface text-ink hover:bg-hover"
+            }`}
+          >
+            S
+          </button>
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <aside
@@ -208,9 +286,21 @@ export function Sidebar({
       />
 
       <div className="border-b border-line px-4 py-3.5">
-        <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
-          Conversations
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
+            Conversations
+          </p>
+          <button
+            type="button"
+            title="Collapse conversations"
+            aria-label="Collapse conversations panel"
+            aria-expanded={true}
+            onClick={onToggleCollapse}
+            className="flex h-7 w-7 items-center justify-center border border-line bg-surface text-sm text-ink transition hover:bg-hover"
+          >
+            ‹
+          </button>
+        </div>
         <button
           type="button"
           onClick={onNewChat}

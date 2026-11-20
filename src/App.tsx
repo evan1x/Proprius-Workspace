@@ -7,7 +7,11 @@ import {
   type ExternalPullRequest,
 } from "./components/ModelSelector";
 import { SettingsPanel } from "./components/SettingsPanel";
-import { Sidebar } from "./components/Sidebar";
+import {
+  Sidebar,
+  readSidebarCollapsed,
+  saveSidebarCollapsed,
+} from "./components/Sidebar";
 import {
   loadModelParameters,
   saveModelParameters,
@@ -88,8 +92,21 @@ function App() {
     typeof window === "undefined" ? OVERLAY_PANELS_BELOW : window.innerWidth,
   );
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const chatInputRef = useRef<ChatInputHandle | null>(null);
   const dragDepthRef = useRef(0);
+
+  useEffect(() => {
+    setSidebarCollapsed(readSidebarCollapsed());
+  }, []);
+
+  function handleToggleSidebarCollapse() {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      saveSidebarCollapsed(next);
+      return next;
+    });
+  }
 
   const activeConversation =
     conversations.find((conversation) => conversation.id === activeId) ?? null;
@@ -400,12 +417,14 @@ function App() {
         conversations={conversations}
         activeId={activeId}
         settingsOpen={settingsOpen}
+        collapsed={sidebarCollapsed}
         hidden={hideSidebar}
         onSelect={handleSelect}
         onNewChat={handleNewChat}
         onDelete={(id) => {
           void handleDelete(id);
         }}
+        onToggleCollapse={handleToggleSidebarCollapse}
         onOpenSettings={() => {
           setSettingsOpen((current) => {
             const next = !current;

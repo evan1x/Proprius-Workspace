@@ -739,7 +739,7 @@ export async function generateResponse(
     model: string;
     stream: boolean;
     messages: OllamaChatMessage[];
-    options?: Record<string, number>;
+    options?: Record<string, number | string[]>;
   } = {
     model,
     stream: false,

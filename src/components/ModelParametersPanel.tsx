@@ -16,6 +16,7 @@ const PANEL_WIDTH_STORAGE_KEY = "proprius.parametersPanelWidth";
 const PANEL_MIN_WIDTH = 280;
 const PANEL_MAX_WIDTH = 720;
 const PANEL_DEFAULT_WIDTH = 384;
+const ADVANCED_OPEN_STORAGE_KEY = "proprius.parametersAdvancedOpen";
 
 function clampPanelWidth(width: number): number {
   return Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, Math.round(width)));
@@ -33,6 +34,14 @@ function readStoredPanelWidth(): number {
   }
 }
 
+function readAdvancedOpen(): boolean {
+  try {
+    return window.localStorage.getItem(ADVANCED_OPEN_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 interface ModelParametersPanelProps {
   open: boolean;
   overlay?: boolean;
@@ -41,6 +50,42 @@ interface ModelParametersPanelProps {
   disabled?: boolean;
   onChange: (next: ModelParameters) => void;
   onClose: () => void;
+}
+
+function SectionHeader({
+  title,
+  open,
+  onToggle,
+}: {
+  title: string;
+  open?: boolean;
+  onToggle?: () => void;
+}) {
+  if (!onToggle) {
+    return (
+      <div className="border-b border-line bg-surface/40 px-4 py-2.5">
+        <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
+          {title}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      className="flex w-full items-center justify-between border-b border-line bg-surface/40 px-4 py-2.5 text-left transition hover:bg-hover"
+    >
+      <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
+        {title}
+      </p>
+      <span aria-hidden="true" className="text-xs text-ink-muted">
+        {open ? "▾" : "▸"}
+      </span>
+    </button>
+  );
 }
 
 function ParameterField({
@@ -65,6 +110,88 @@ function ParameterField({
   );
 }
 
+function RangeNumberField({
+  label,
+  hint,
+  value,
+  min,
+  max,
+  step,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  disabled?: boolean;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <ParameterField label={label} hint={hint}>
+      <div className="flex items-center gap-3">
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          disabled={disabled}
+          value={value}
+          onChange={(event) => onChange(Number(event.target.value))}
+          className="min-w-0 flex-1 accent-ink"
+        />
+        <input
+          type="number"
+          min={min}
+          max={max}
+          step={step}
+          disabled={disabled}
+          value={value}
+          onChange={(event) => onChange(Number(event.target.value))}
+          className="w-16 border border-line bg-paper px-2 py-1.5 text-sm text-ink outline-none focus:bg-hover disabled:opacity-50"
+        />
+      </div>
+    </ParameterField>
+  );
+}
+
+function NumberField({
+  label,
+  hint,
+  value,
+  min,
+  max,
+  step,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  disabled?: boolean;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <ParameterField label={label} hint={hint}>
+      <input
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        disabled={disabled}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="w-full border border-line bg-paper px-3 py-2 text-sm text-ink outline-none focus:bg-hover disabled:opacity-50"
+      />
+    </ParameterField>
+  );
+}
+
 export function ModelParametersPanel({
   open,
   overlay = false,
@@ -77,6 +204,7 @@ export function ModelParametersPanel({
   const [draft, setDraft] = useState<ModelParameters>(value);
   const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT_WIDTH);
   const [isResizing, setIsResizing] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const resizeDragRef = useRef<{ startX: number; startWidth: number } | null>(
     null,
   );
@@ -84,6 +212,7 @@ export function ModelParametersPanel({
 
   useEffect(() => {
     setPanelWidth(readStoredPanelWidth());
+    setAdvancedOpen(readAdvancedOpen());
   }, []);
 
   useEffect(() => {
@@ -119,7 +248,6 @@ export function ModelParametersPanel({
     function handlePointerMove(event: PointerEvent) {
       const drag = resizeDragRef.current;
       if (!drag) return;
-      // Left-edge drag: moving left widens the right-side panel.
       const maxWidth = Math.max(PANEL_MIN_WIDTH, window.innerWidth - 16);
       const nextWidth = Math.min(
         maxWidth,
@@ -175,6 +303,21 @@ export function ModelParametersPanel({
       panelWidthRef.current = next;
       try {
         window.localStorage.setItem(PANEL_WIDTH_STORAGE_KEY, String(next));
+      } catch {
+        // ignore storage failures
+      }
+      return next;
+    });
+  }
+
+  function toggleAdvanced() {
+    setAdvancedOpen((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(
+          ADVANCED_OPEN_STORAGE_KEY,
+          next ? "1" : "0",
+        );
       } catch {
         // ignore storage failures
       }
@@ -252,115 +395,51 @@ export function ModelParametersPanel({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <ParameterField
+        <SectionHeader title="Basic" />
+
+        <RangeNumberField
           label="Temperature"
           hint="Higher = more creative / random. Lower = more focused."
-        >
-          <div className="flex items-center gap-3">
-            <input
-              type="range"
-              min={0}
-              max={2}
-              step={0.05}
-              disabled={disabled}
-              value={draft.temperature}
-              onChange={(event) =>
-                update("temperature", Number(event.target.value))
-              }
-              className="min-w-0 flex-1 accent-ink"
-            />
-            <input
-              type="number"
-              min={0}
-              max={2}
-              step={0.05}
-              disabled={disabled}
-              value={draft.temperature}
-              onChange={(event) =>
-                update("temperature", Number(event.target.value))
-              }
-              className="w-16 border border-line bg-paper px-2 py-1.5 text-sm text-ink outline-none focus:bg-hover disabled:opacity-50"
-            />
-          </div>
-        </ParameterField>
+          value={draft.temperature}
+          min={0}
+          max={2}
+          step={0.05}
+          disabled={disabled}
+          onChange={(next) => update("temperature", next)}
+        />
 
-        <ParameterField
+        <RangeNumberField
           label="Top P"
           hint="Nucleus sampling cutoff. Lower narrows token choices."
-        >
-          <div className="flex items-center gap-3">
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              disabled={disabled}
-              value={draft.topP}
-              onChange={(event) => update("topP", Number(event.target.value))}
-              className="min-w-0 flex-1 accent-ink"
-            />
-            <input
-              type="number"
-              min={0}
-              max={1}
-              step={0.01}
-              disabled={disabled}
-              value={draft.topP}
-              onChange={(event) => update("topP", Number(event.target.value))}
-              className="w-16 border border-line bg-paper px-2 py-1.5 text-sm text-ink outline-none focus:bg-hover disabled:opacity-50"
-            />
-          </div>
-        </ParameterField>
+          value={draft.topP}
+          min={0}
+          max={1}
+          step={0.01}
+          disabled={disabled}
+          onChange={(next) => update("topP", next)}
+        />
 
-        <ParameterField
+        <NumberField
           label="Top K"
           hint="Limits sampling to the K most likely tokens."
-        >
-          <input
-            type="number"
-            min={1}
-            max={100}
-            step={1}
-            disabled={disabled}
-            value={draft.topK}
-            onChange={(event) => update("topK", Number(event.target.value))}
-            className="w-full border border-line bg-paper px-3 py-2 text-sm text-ink outline-none focus:bg-hover disabled:opacity-50"
-          />
-        </ParameterField>
+          value={draft.topK}
+          min={1}
+          max={100}
+          step={1}
+          disabled={disabled}
+          onChange={(next) => update("topK", next)}
+        />
 
-        <ParameterField
-          label="Context length"
-          hint="Token window sent to the model (num_ctx)."
-        >
-          <input
-            type="number"
-            min={512}
-            max={131072}
-            step={256}
-            disabled={disabled}
-            value={draft.numCtx}
-            onChange={(event) => update("numCtx", Number(event.target.value))}
-            className="w-full border border-line bg-paper px-3 py-2 text-sm text-ink outline-none focus:bg-hover disabled:opacity-50"
-          />
-        </ParameterField>
-
-        <ParameterField
+        <NumberField
           label="Max tokens"
           hint="Caps reply length. Use -1 for the model default."
-        >
-          <input
-            type="number"
-            min={-1}
-            max={8192}
-            step={1}
-            disabled={disabled}
-            value={draft.numPredict}
-            onChange={(event) =>
-              update("numPredict", Number(event.target.value))
-            }
-            className="w-full border border-line bg-paper px-3 py-2 text-sm text-ink outline-none focus:bg-hover disabled:opacity-50"
-          />
-        </ParameterField>
+          value={draft.numPredict}
+          min={-1}
+          max={8192}
+          step={1}
+          disabled={disabled}
+          onChange={(next) => update("numPredict", next)}
+        />
 
         <ParameterField
           label="System prompt"
@@ -375,6 +454,158 @@ export function ModelParametersPanel({
             className="w-full resize-y border border-line bg-paper px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-muted focus:bg-hover disabled:opacity-50"
           />
         </ParameterField>
+
+        <SectionHeader
+          title="Advanced"
+          open={advancedOpen}
+          onToggle={toggleAdvanced}
+        />
+
+        {advancedOpen && (
+          <>
+            <NumberField
+              label="Context length"
+              hint="Token window sent to the model (num_ctx)."
+              value={draft.numCtx}
+              min={512}
+              max={131072}
+              step={256}
+              disabled={disabled}
+              onChange={(next) => update("numCtx", next)}
+            />
+
+            <RangeNumberField
+              label="Repeat penalty"
+              hint="Discourages repeating the same tokens."
+              value={draft.repeatPenalty}
+              min={0}
+              max={2}
+              step={0.05}
+              disabled={disabled}
+              onChange={(next) => update("repeatPenalty", next)}
+            />
+
+            <NumberField
+              label="Repeat last N"
+              hint="How far back to look for repetitions. -1 uses the full context."
+              value={draft.repeatLastN}
+              min={-1}
+              max={2048}
+              step={1}
+              disabled={disabled}
+              onChange={(next) => update("repeatLastN", next)}
+            />
+
+            <RangeNumberField
+              label="Presence penalty"
+              hint="Penalizes tokens that already appeared, encouraging new topics."
+              value={draft.presencePenalty}
+              min={-2}
+              max={2}
+              step={0.05}
+              disabled={disabled}
+              onChange={(next) => update("presencePenalty", next)}
+            />
+
+            <RangeNumberField
+              label="Frequency penalty"
+              hint="Penalizes tokens by how often they already appeared."
+              value={draft.frequencyPenalty}
+              min={-2}
+              max={2}
+              step={0.05}
+              disabled={disabled}
+              onChange={(next) => update("frequencyPenalty", next)}
+            />
+
+            <RangeNumberField
+              label="Min P"
+              hint="Drops tokens below this probability relative to the top token."
+              value={draft.minP}
+              min={0}
+              max={1}
+              step={0.01}
+              disabled={disabled}
+              onChange={(next) => update("minP", next)}
+            />
+
+            <RangeNumberField
+              label="Typical P"
+              hint="Locally typical sampling. 1.0 disables it."
+              value={draft.typicalP}
+              min={0}
+              max={1}
+              step={0.01}
+              disabled={disabled}
+              onChange={(next) => update("typicalP", next)}
+            />
+
+            <ParameterField
+              label="Mirostat"
+              hint="0 off, 1 Mirostat, 2 Mirostat 2.0 — adaptive perplexity control."
+            >
+              <select
+                disabled={disabled}
+                value={draft.mirostat}
+                onChange={(event) =>
+                  update("mirostat", Number(event.target.value))
+                }
+                className="w-full border border-line bg-paper px-3 py-2 text-sm text-ink outline-none focus:bg-hover disabled:opacity-50"
+              >
+                <option value={0}>Off (0)</option>
+                <option value={1}>Mirostat (1)</option>
+                <option value={2}>Mirostat 2.0 (2)</option>
+              </select>
+            </ParameterField>
+
+            <RangeNumberField
+              label="Mirostat tau"
+              hint="Target surprise / entropy balance for Mirostat."
+              value={draft.mirostatTau}
+              min={0}
+              max={10}
+              step={0.1}
+              disabled={disabled || draft.mirostat === 0}
+              onChange={(next) => update("mirostatTau", next)}
+            />
+
+            <RangeNumberField
+              label="Mirostat eta"
+              hint="Learning rate for Mirostat adjustments."
+              value={draft.mirostatEta}
+              min={0}
+              max={1}
+              step={0.01}
+              disabled={disabled || draft.mirostat === 0}
+              onChange={(next) => update("mirostatEta", next)}
+            />
+
+            <NumberField
+              label="Seed"
+              hint="Fixed seed for reproducible output. -1 = random."
+              value={draft.seed}
+              min={-1}
+              max={2_147_483_647}
+              step={1}
+              disabled={disabled}
+              onChange={(next) => update("seed", next)}
+            />
+
+            <ParameterField
+              label="Stop sequences"
+              hint="Comma-separated strings that end generation early."
+            >
+              <input
+                type="text"
+                disabled={disabled}
+                value={draft.stop}
+                onChange={(event) => update("stop", event.target.value)}
+                placeholder="e.g. User:, ###"
+                className="w-full border border-line bg-paper px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-muted focus:bg-hover disabled:opacity-50"
+              />
+            </ParameterField>
+          </>
+        )}
       </div>
 
       <div className="flex gap-2 border-t border-line px-4 py-4">
