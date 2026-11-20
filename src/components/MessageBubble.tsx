@@ -1,11 +1,46 @@
+import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 import { formatAttachmentSize } from "../services/attachments";
 import type { ChatMessage } from "../types/chat";
+import { CodeBlock } from "./CodeBlock";
 
 interface MessageBubbleProps {
   message: ChatMessage;
 }
+
+const markdownComponents: Components = {
+  pre({ children }) {
+    return <>{children}</>;
+  },
+  code({ className, children, ...props }) {
+    const languageMatch = /language-([\w+-]+)/.exec(className || "");
+    const isBlock =
+      Boolean(languageMatch) ||
+      (typeof children === "string" && children.includes("\n")) ||
+      (Array.isArray(children) &&
+        children.some(
+          (child) => typeof child === "string" && child.includes("\n"),
+        ));
+
+    if (!isBlock) {
+      return (
+        <code className={className} {...props}>
+          {children}
+        </code>
+      );
+    }
+
+    return (
+      <CodeBlock language={languageMatch?.[1]}>
+        <code className={className} {...props}>
+          {children}
+        </code>
+      </CodeBlock>
+    );
+  },
+};
 
 export function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === "user";
@@ -66,7 +101,11 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           ) : null
         ) : (
           <div className="markdown-body break-words text-[15px] leading-relaxed">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[[rehypeHighlight, { detect: true }]]}
+              components={markdownComponents}
+            >
               {message.content}
             </ReactMarkdown>
           </div>
