@@ -18,7 +18,7 @@ export function ChatWindow({ messages, isGenerating }: ChatWindowProps) {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5 sm:py-6 md:px-8">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 sm:gap-6">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 sm:gap-6">
         {isEmpty && (
           <div className="mt-16 px-2 text-center md:mt-24">
             <p className="text-base font-medium tracking-tight text-ink">

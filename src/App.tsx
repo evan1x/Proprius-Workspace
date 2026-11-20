@@ -534,7 +534,7 @@ function App() {
 
         {error && (
           <div className="px-3 pb-2 sm:px-5 md:px-8">
-            <p className="mx-auto max-w-3xl border border-line bg-surface px-3 py-2 text-sm text-ink">
+            <p className="mx-auto max-w-5xl border border-line bg-surface px-3 py-2 text-sm text-ink">
               {error}
             </p>
           </div>

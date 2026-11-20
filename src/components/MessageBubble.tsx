@@ -53,8 +53,8 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       <div
         className={
           isUser
-            ? "max-w-[min(32rem,85%)] rounded-2xl rounded-br-md bg-surface px-4 py-2.5 text-ink"
-            : "w-full max-w-[42rem] rounded-2xl rounded-bl-md bg-panel px-4 py-3 text-ink"
+            ? "max-w-[min(40rem,85%)] rounded-2xl rounded-br-md bg-surface px-4 py-2.5 text-ink"
+            : "w-full rounded-2xl rounded-bl-md bg-panel px-4 py-3 text-ink"
         }
       >
         {!isUser && (
