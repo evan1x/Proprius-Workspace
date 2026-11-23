@@ -465,7 +465,12 @@ export function Sidebar({
       menuOpen?.type === "move" && menuOpen.id === conversation.id;
 
     return (
-      <li key={conversation.id} className="relative px-1.5 py-1">
+      <li
+        key={conversation.id}
+        className={`relative px-1.5 py-1 ${
+          isMenuOpen || isMoveOpen ? "z-40" : ""
+        }`}
+      >
         <div
           title="Drag to a folder"
           onPointerDown={(event) => handleChatPointerDown(event, conversation)}
@@ -526,7 +531,8 @@ export function Sidebar({
             {isMenuOpen && (
               <div
                 role="menu"
-                className="absolute top-9 right-0 z-20 min-w-[8.5rem] border border-line bg-surface"
+                className="absolute top-9 right-0 z-[60] min-w-[8.5rem] border border-line bg-surface shadow-lg"
+                style={{ backgroundColor: "var(--color-surface)" }}
               >
                 <button
                   type="button"
@@ -557,7 +563,8 @@ export function Sidebar({
             {isMoveOpen && (
               <div
                 role="menu"
-                className="absolute top-9 right-0 z-30 max-h-56 min-w-[9rem] overflow-y-auto border border-line bg-surface"
+                className="absolute top-9 right-0 z-[60] max-h-56 min-w-[9rem] overflow-y-auto border border-line bg-surface shadow-lg"
+                style={{ backgroundColor: "var(--color-surface)" }}
               >
                 <button
                   type="button"
@@ -614,6 +621,12 @@ export function Sidebar({
     const expanded = isFolderExpanded(folder.id);
     const isMenuOpen =
       menuOpen?.type === "folder" && menuOpen.id === folder.id;
+    const hasOpenChatMenu = items.some(
+      (item) =>
+        (menuOpen?.type === "chat" || menuOpen?.type === "move") &&
+        menuOpen.id === item.id,
+    );
+    const elevate = isMenuOpen || hasOpenChatMenu;
     const isRenaming = renamingFolderId === folder.id;
     const isDropTarget = dropTargetKey === folder.id;
     const folderColor = getFolderColor(folder.color);
@@ -628,9 +641,9 @@ export function Sidebar({
             ? undefined
             : `${folderColor.swatch}22`,
         }}
-        className={`mx-2 overflow-hidden rounded-sm border border-line/70 transition ${
+        className={`relative mx-2 rounded-sm border border-line/70 transition ${
           isDropTarget ? "bg-hover ring-1 ring-inset ring-ink/40" : ""
-        }`}
+        } ${elevate ? "z-50" : "z-0"}`}
       >
         <div
           className="flex items-center gap-1 border-b border-line/50 px-2 py-1.5"
@@ -712,7 +725,8 @@ export function Sidebar({
             {isMenuOpen && (
               <div
                 role="menu"
-                className="absolute top-8 right-0 z-20 min-w-[10rem] border border-line bg-surface"
+                className="absolute top-8 right-0 z-[60] min-w-[10rem] border border-line bg-surface shadow-lg"
+                style={{ backgroundColor: "var(--color-surface)" }}
               >
                 <button
                   type="button"
@@ -941,10 +955,18 @@ export function Sidebar({
 
             <div
               data-drop-key={UNFILED_DROP_KEY}
-              className={`mx-2 overflow-hidden rounded-sm border border-line/70 transition ${
+              className={`relative mx-2 rounded-sm border border-line/70 transition ${
                 dropTargetKey === UNFILED_DROP_KEY
                   ? "bg-hover ring-1 ring-inset ring-ink/40"
                   : "bg-surface/30"
+              } ${
+                unfiledConversations.some(
+                  (item) =>
+                    (menuOpen?.type === "chat" || menuOpen?.type === "move") &&
+                    menuOpen.id === item.id,
+                )
+                  ? "z-50"
+                  : "z-0"
               }`}
               style={{ borderLeft: "6px solid #6a6a6a" }}
             >
