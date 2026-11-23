@@ -465,13 +465,13 @@ export function Sidebar({
       menuOpen?.type === "move" && menuOpen.id === conversation.id;
 
     return (
-      <li key={conversation.id} className="relative px-2 py-0.5">
+      <li key={conversation.id} className="relative px-1.5 py-1">
         <div
           title="Drag to a folder"
           onPointerDown={(event) => handleChatPointerDown(event, conversation)}
           style={
             accentColor
-              ? { boxShadow: `inset 3px 0 0 ${accentColor}` }
+              ? { boxShadow: `inset 5px 0 0 ${accentColor}` }
               : undefined
           }
           className={`flex w-full cursor-grab items-stretch transition active:cursor-grabbing ${
@@ -489,7 +489,9 @@ export function Sidebar({
               setMenuOpen(null);
               onSelect(conversation.id);
             }}
-            className="min-w-0 flex-1 cursor-inherit px-3 py-2.5 text-left"
+            className={`min-w-0 flex-1 cursor-inherit py-2.5 text-left ${
+              accentColor ? "pr-3 pl-4" : "px-3"
+            }`}
           >
             <span className="block w-full truncate text-sm font-medium">
               {conversation.title}
@@ -621,16 +623,19 @@ export function Sidebar({
         key={folder.id}
         data-drop-key={folder.id}
         style={{
-          borderLeft: `3px solid ${folderColor.swatch}`,
+          borderLeft: `6px solid ${folderColor.swatch}`,
           backgroundColor: isDropTarget
             ? undefined
-            : `${folderColor.swatch}12`,
+            : `${folderColor.swatch}22`,
         }}
-        className={`border-b border-line/60 transition ${
+        className={`mx-2 overflow-hidden rounded-sm border border-line/70 transition ${
           isDropTarget ? "bg-hover ring-1 ring-inset ring-ink/40" : ""
         }`}
       >
-        <div className="flex items-center gap-1 px-2 py-1">
+        <div
+          className="flex items-center gap-1 border-b border-line/50 px-2 py-1.5"
+          style={{ backgroundColor: `${folderColor.swatch}18` }}
+        >
           <button
             type="button"
             onClick={() => toggleFolderExpanded(folder.id)}
@@ -643,7 +648,7 @@ export function Sidebar({
             <span
               aria-hidden="true"
               title={folderColor.label}
-              className="h-2.5 w-2.5 shrink-0 rounded-full"
+              className="h-3 w-3 shrink-0 rounded-full"
               style={{ backgroundColor: folderColor.swatch }}
             />
             {isRenaming ? (
@@ -774,9 +779,9 @@ export function Sidebar({
         </div>
 
         {expanded && (
-          <ul className="flex flex-col pb-1">
+          <ul className="flex flex-col gap-0.5 px-1 py-1.5">
             {items.length === 0 ? (
-              <li className="px-4 py-2 text-[10px] text-ink-muted">
+              <li className="px-4 py-2.5 text-[10px] text-ink-muted">
                 Drop chats here to organize them.
               </li>
             ) : (
@@ -931,26 +936,31 @@ export function Sidebar({
             organize conversations.
           </p>
         ) : (
-          <>
+          <div className="flex flex-col gap-2.5 py-2.5">
             {folders.map(renderFolderSection)}
 
             <div
               data-drop-key={UNFILED_DROP_KEY}
-              className={`transition ${
+              className={`mx-2 overflow-hidden rounded-sm border border-line/70 transition ${
                 dropTargetKey === UNFILED_DROP_KEY
                   ? "bg-hover ring-1 ring-inset ring-ink/40"
-                  : ""
+                  : "bg-surface/30"
               }`}
+              style={{ borderLeft: "6px solid #6a6a6a" }}
             >
               <button
                 type="button"
                 onClick={() => toggleFolderExpanded(UNFILED_DROP_KEY)}
-                className="flex w-full items-center gap-2 px-4 py-2 text-left transition hover:bg-hover"
+                className="flex w-full items-center gap-2 border-b border-line/50 px-4 py-2.5 text-left transition hover:bg-hover"
                 aria-expanded={isFolderExpanded(UNFILED_DROP_KEY)}
               >
                 <span aria-hidden="true" className="text-[10px] text-ink-muted">
                   {isFolderExpanded(UNFILED_DROP_KEY) ? "▾" : "▸"}
                 </span>
+                <span
+                  aria-hidden="true"
+                  className="h-3 w-3 shrink-0 rounded-full bg-ink-muted"
+                />
                 <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-ink-muted">
                   Unfiled
                   <span className="ml-1.5 text-ink-muted/70">
@@ -959,20 +969,20 @@ export function Sidebar({
                 </span>
               </button>
               {isFolderExpanded(UNFILED_DROP_KEY) && (
-                <ul className="flex flex-col pb-1">
+                <ul className="flex flex-col gap-0.5 px-1 py-1.5">
                   {unfiledConversations.length === 0 ? (
-                    <li className="px-4 py-2 text-[10px] text-ink-muted">
+                    <li className="px-4 py-2.5 text-[10px] text-ink-muted">
                       Drop chats here, or leave them unfiled.
                     </li>
                   ) : (
                     unfiledConversations.map((conversation) =>
-                      renderConversationRow(conversation),
+                      renderConversationRow(conversation, "#6a6a6a"),
                     )
                   )}
                 </ul>
               )}
             </div>
-          </>
+          </div>
         )}
       </div>
 
