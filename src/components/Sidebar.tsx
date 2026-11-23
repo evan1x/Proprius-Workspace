@@ -3,6 +3,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -11,6 +12,8 @@ import type { Conversation, Folder } from "../types/chat";
 const SIDEBAR_WIDTH_STORAGE_KEY = "proprius.conversationsSidebarWidth";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "proprius.conversationsSidebarCollapsed";
 const FOLDER_EXPANDED_STORAGE_KEY = "proprius.folderExpanded";
+const CONVERSATION_DRAG_TYPE = "application/x-proprius-conversation";
+const UNFILED_DROP_KEY = "__unfiled";
 const SIDEBAR_MIN_WIDTH = 200;
 const SIDEBAR_MAX_WIDTH = 480;
 const SIDEBAR_DEFAULT_WIDTH = 256;
@@ -139,12 +142,16 @@ export function Sidebar({
   >({ __unfiled: true });
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const renameInputRef = useRef<HTMLInputElement | null>(null);
   const resizeDragRef = useRef<{ startX: number; startWidth: number } | null>(
     null,
   );
   const sidebarWidthRef = useRef(sidebarWidth);
+  const conversationsRef = useRef(conversations);
+  conversationsRef.current = conversations;
 
   const unfiledConversations = useMemo(
     () => conversations.filter((item) => !item.folderId),
@@ -302,8 +309,76 @@ export function Sidebar({
     setRenameValue("");
   }
 
+  function isConversationDrag(event: ReactDragEvent): boolean {
+    return Array.from(event.dataTransfer.types).includes(CONVERSATION_DRAG_TYPE);
+  }
+
+  function handleConversationDragStart(
+    event: ReactDragEvent<HTMLElement>,
+    conversationId: string,
+  ) {
+    event.dataTransfer.setData(CONVERSATION_DRAG_TYPE, conversationId);
+    event.dataTransfer.effectAllowed = "move";
+    setMenuOpen(null);
+    setDraggingId(conversationId);
+  }
+
+  function handleConversationDragEnd() {
+    setDraggingId(null);
+    setDropTargetKey(null);
+  }
+
+  function handleDropTargetDragOver(
+    event: ReactDragEvent<HTMLElement>,
+    targetKey: string,
+  ) {
+    if (!isConversationDrag(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "move";
+    if (dropTargetKey !== targetKey) setDropTargetKey(targetKey);
+    if (targetKey !== UNFILED_DROP_KEY && !isFolderExpanded(targetKey)) {
+      setExpandedFolders((current) => {
+        const next = { ...current, [targetKey]: true };
+        saveExpandedFolders(next);
+        return next;
+      });
+    }
+  }
+
+  function handleDropTargetDragLeave(event: ReactDragEvent<HTMLElement>) {
+    if (!isConversationDrag(event)) return;
+    const nextTarget = event.relatedTarget as Node | null;
+    if (nextTarget && event.currentTarget.contains(nextTarget)) return;
+    setDropTargetKey((current) =>
+      current === event.currentTarget.dataset.dropKey ? null : current,
+    );
+  }
+
+  function handleDropOnTarget(
+    event: ReactDragEvent<HTMLElement>,
+    folderId: string | null,
+  ) {
+    if (!isConversationDrag(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const conversationId =
+      event.dataTransfer.getData(CONVERSATION_DRAG_TYPE) || draggingId;
+    setDraggingId(null);
+    setDropTargetKey(null);
+    if (!conversationId) return;
+
+    const conversation = conversationsRef.current.find(
+      (item) => item.id === conversationId,
+    );
+    const currentFolderId = conversation?.folderId ?? null;
+    if (currentFolderId === folderId) return;
+    onMoveConversation(conversationId, folderId);
+  }
+
   function renderConversationRow(conversation: Conversation) {
     const isActive = conversation.id === activeId;
+    const isDragging = draggingId === conversation.id;
     const isMenuOpen =
       menuOpen?.type === "chat" && menuOpen.id === conversation.id;
     const isMoveOpen =
@@ -312,7 +387,15 @@ export function Sidebar({
     return (
       <li key={conversation.id} className="relative px-2 py-0.5">
         <div
-          className={`flex w-full items-stretch transition ${
+          draggable
+          title="Drag to a folder"
+          onDragStart={(event) =>
+            handleConversationDragStart(event, conversation.id)
+          }
+          onDragEnd={handleConversationDragEnd}
+          className={`flex w-full cursor-grab items-stretch transition active:cursor-grabbing ${
+            isDragging ? "opacity-45" : ""
+          } ${
             isActive
               ? "bg-surface text-ink"
               : "bg-transparent text-ink hover:bg-hover"
@@ -320,11 +403,12 @@ export function Sidebar({
         >
           <button
             type="button"
+            draggable={false}
             onClick={() => {
               setMenuOpen(null);
               onSelect(conversation.id);
             }}
-            className="min-w-0 flex-1 px-3 py-2.5 text-left"
+            className="min-w-0 flex-1 cursor-inherit px-3 py-2.5 text-left"
           >
             <span className="block w-full truncate text-sm font-medium">
               {conversation.title}
@@ -440,9 +524,19 @@ export function Sidebar({
     const isMenuOpen =
       menuOpen?.type === "folder" && menuOpen.id === folder.id;
     const isRenaming = renamingFolderId === folder.id;
+    const isDropTarget = dropTargetKey === folder.id;
 
     return (
-      <div key={folder.id} className="border-b border-line/60">
+      <div
+        key={folder.id}
+        data-drop-key={folder.id}
+        onDragOver={(event) => handleDropTargetDragOver(event, folder.id)}
+        onDragLeave={handleDropTargetDragLeave}
+        onDrop={(event) => handleDropOnTarget(event, folder.id)}
+        className={`border-b border-line/60 transition ${
+          isDropTarget ? "bg-hover ring-1 ring-inset ring-ink/40" : ""
+        }`}
+      >
         <div className="flex items-center gap-1 px-2 py-1">
           <button
             type="button"
@@ -550,7 +644,7 @@ export function Sidebar({
           <ul className="flex flex-col pb-1">
             {items.length === 0 ? (
               <li className="px-4 py-2 text-[10px] text-ink-muted">
-                No chats in this folder.
+                Drop chats here to organize them.
               </li>
             ) : (
               items.map(renderConversationRow)
@@ -692,15 +786,27 @@ export function Sidebar({
           <>
             {folders.map(renderFolderSection)}
 
-            <div>
+            <div
+              data-drop-key={UNFILED_DROP_KEY}
+              onDragOver={(event) =>
+                handleDropTargetDragOver(event, UNFILED_DROP_KEY)
+              }
+              onDragLeave={handleDropTargetDragLeave}
+              onDrop={(event) => handleDropOnTarget(event, null)}
+              className={`transition ${
+                dropTargetKey === UNFILED_DROP_KEY
+                  ? "bg-hover ring-1 ring-inset ring-ink/40"
+                  : ""
+              }`}
+            >
               <button
                 type="button"
-                onClick={() => toggleFolderExpanded("__unfiled")}
+                onClick={() => toggleFolderExpanded(UNFILED_DROP_KEY)}
                 className="flex w-full items-center gap-2 px-4 py-2 text-left transition hover:bg-hover"
-                aria-expanded={isFolderExpanded("__unfiled")}
+                aria-expanded={isFolderExpanded(UNFILED_DROP_KEY)}
               >
                 <span aria-hidden="true" className="text-[10px] text-ink-muted">
-                  {isFolderExpanded("__unfiled") ? "▾" : "▸"}
+                  {isFolderExpanded(UNFILED_DROP_KEY) ? "▾" : "▸"}
                 </span>
                 <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-ink-muted">
                   Unfiled
@@ -709,11 +815,11 @@ export function Sidebar({
                   </span>
                 </span>
               </button>
-              {isFolderExpanded("__unfiled") && (
+              {isFolderExpanded(UNFILED_DROP_KEY) && (
                 <ul className="flex flex-col pb-1">
                   {unfiledConversations.length === 0 ? (
                     <li className="px-4 py-2 text-[10px] text-ink-muted">
-                      Chats without a folder appear here.
+                      Drop chats here, or leave them unfiled.
                     </li>
                   ) : (
                     unfiledConversations.map(renderConversationRow)
