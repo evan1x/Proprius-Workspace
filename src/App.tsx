@@ -29,6 +29,7 @@ import {
   listFolders,
   moveConversationToFolder,
   renameFolder,
+  setFolderColor,
 } from "./services/folders";
 import {
   DEFAULT_MODEL,
@@ -273,7 +274,7 @@ function App() {
   async function handleNewFolder(): Promise<Folder | null> {
     setError(null);
     try {
-      const folder = await createFolder("New folder");
+      const folder = await createFolder("New folder", folders.length);
       setFolders((prev) => [...prev, folder]);
       return folder;
     } catch (err) {
@@ -298,6 +299,24 @@ function App() {
       setFolders(previous);
       setError(
         err instanceof Error ? err.message : "Failed to rename folder.",
+      );
+    }
+  }
+
+  async function handleSetFolderColor(folderId: string, color: string) {
+    setError(null);
+    const previous = folders;
+    setFolders((prev) =>
+      prev.map((folder) =>
+        folder.id === folderId ? { ...folder, color } : folder,
+      ),
+    );
+    try {
+      await setFolderColor(folderId, color);
+    } catch (err) {
+      setFolders(previous);
+      setError(
+        err instanceof Error ? err.message : "Failed to update folder color.",
       );
     }
   }
@@ -525,6 +544,9 @@ function App() {
         onNewFolder={handleNewFolder}
         onRenameFolder={(folderId, name) => {
           void handleRenameFolder(folderId, name);
+        }}
+        onSetFolderColor={(folderId, color) => {
+          void handleSetFolderColor(folderId, color);
         }}
         onDeleteFolder={(folderId) => {
           void handleDeleteFolder(folderId);

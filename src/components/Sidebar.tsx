@@ -7,6 +7,10 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import type { Conversation, Folder } from "../types/chat";
+import {
+  FOLDER_COLOR_OPTIONS,
+  getFolderColor,
+} from "../types/folderColors";
 
 const SIDEBAR_WIDTH_STORAGE_KEY = "proprius.conversationsSidebarWidth";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "proprius.conversationsSidebarCollapsed";
@@ -91,6 +95,7 @@ interface SidebarProps {
   onDelete: (id: string) => void;
   onNewFolder: () => Promise<Folder | null>;
   onRenameFolder: (folderId: string, name: string) => void;
+  onSetFolderColor: (folderId: string, color: string) => void;
   onDeleteFolder: (folderId: string) => void;
   onMoveConversation: (
     conversationId: string,
@@ -128,6 +133,7 @@ export function Sidebar({
   onDelete,
   onNewFolder,
   onRenameFolder,
+  onSetFolderColor,
   onDeleteFolder,
   onMoveConversation,
   onOpenSettings,
@@ -447,7 +453,10 @@ export function Sidebar({
     };
   }
 
-  function renderConversationRow(conversation: Conversation) {
+  function renderConversationRow(
+    conversation: Conversation,
+    accentColor?: string,
+  ) {
     const isActive = conversation.id === activeId;
     const isDragging = draggingId === conversation.id;
     const isMenuOpen =
@@ -460,6 +469,11 @@ export function Sidebar({
         <div
           title="Drag to a folder"
           onPointerDown={(event) => handleChatPointerDown(event, conversation)}
+          style={
+            accentColor
+              ? { boxShadow: `inset 3px 0 0 ${accentColor}` }
+              : undefined
+          }
           className={`flex w-full cursor-grab items-stretch transition active:cursor-grabbing ${
             isDragging ? "opacity-40" : ""
           } ${
@@ -556,22 +570,30 @@ export function Sidebar({
                 >
                   Unfiled
                 </button>
-                {folders.map((folder) => (
-                  <button
-                    key={folder.id}
-                    type="button"
-                    role="menuitem"
-                    disabled={conversation.folderId === folder.id}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setMenuOpen(null);
-                      onMoveConversation(conversation.id, folder.id);
-                    }}
-                    className="w-full px-3 py-2 text-left text-xs font-medium tracking-wide text-ink transition hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {folder.name}
-                  </button>
-                ))}
+                {folders.map((folder) => {
+                  const moveColor = getFolderColor(folder.color);
+                  return (
+                    <button
+                      key={folder.id}
+                      type="button"
+                      role="menuitem"
+                      disabled={conversation.folderId === folder.id}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setMenuOpen(null);
+                        onMoveConversation(conversation.id, folder.id);
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium tracking-wide text-ink transition hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: moveColor.swatch }}
+                      />
+                      <span className="truncate">{folder.name}</span>
+                    </button>
+                  );
+                })}
                 {folders.length === 0 && (
                   <p className="px-3 py-2 text-[10px] text-ink-muted">
                     Create a folder first.
@@ -592,11 +614,18 @@ export function Sidebar({
       menuOpen?.type === "folder" && menuOpen.id === folder.id;
     const isRenaming = renamingFolderId === folder.id;
     const isDropTarget = dropTargetKey === folder.id;
+    const folderColor = getFolderColor(folder.color);
 
     return (
       <div
         key={folder.id}
         data-drop-key={folder.id}
+        style={{
+          borderLeft: `3px solid ${folderColor.swatch}`,
+          backgroundColor: isDropTarget
+            ? undefined
+            : `${folderColor.swatch}12`,
+        }}
         className={`border-b border-line/60 transition ${
           isDropTarget ? "bg-hover ring-1 ring-inset ring-ink/40" : ""
         }`}
@@ -611,6 +640,12 @@ export function Sidebar({
             <span aria-hidden="true" className="text-[10px] text-ink-muted">
               {expanded ? "▾" : "▸"}
             </span>
+            <span
+              aria-hidden="true"
+              title={folderColor.label}
+              className="h-2.5 w-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: folderColor.swatch }}
+            />
             {isRenaming ? (
               <input
                 ref={renameInputRef}
@@ -672,7 +707,7 @@ export function Sidebar({
             {isMenuOpen && (
               <div
                 role="menu"
-                className="absolute top-8 right-0 z-20 min-w-[8rem] border border-line bg-surface"
+                className="absolute top-8 right-0 z-20 min-w-[10rem] border border-line bg-surface"
               >
                 <button
                   type="button"
@@ -687,6 +722,40 @@ export function Sidebar({
                 >
                   Rename
                 </button>
+                <div className="border-t border-line px-3 py-2">
+                  <p className="mb-2 text-[10px] font-medium uppercase tracking-[0.12em] text-ink-muted">
+                    Color
+                  </p>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {FOLDER_COLOR_OPTIONS.map((option) => {
+                      const selected = folder.color === option.id;
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={selected}
+                          title={option.label}
+                          aria-label={`Set color ${option.label}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onSetFolderColor(folder.id, option.id);
+                          }}
+                          className={`flex h-6 w-6 items-center justify-center rounded-full border transition ${
+                            selected
+                              ? "border-ink"
+                              : "border-transparent hover:border-line"
+                          }`}
+                        >
+                          <span
+                            className="h-3.5 w-3.5 rounded-full"
+                            style={{ backgroundColor: option.swatch }}
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
                 <button
                   type="button"
                   role="menuitem"
@@ -695,7 +764,7 @@ export function Sidebar({
                     setMenuOpen(null);
                     onDeleteFolder(folder.id);
                   }}
-                  className="w-full px-3 py-2 text-left text-xs font-medium tracking-wide text-ink transition hover:bg-hover"
+                  className="w-full border-t border-line px-3 py-2 text-left text-xs font-medium tracking-wide text-ink transition hover:bg-hover"
                 >
                   Delete folder
                 </button>
@@ -711,7 +780,9 @@ export function Sidebar({
                 Drop chats here to organize them.
               </li>
             ) : (
-              items.map(renderConversationRow)
+              items.map((conversation) =>
+                renderConversationRow(conversation, folderColor.swatch),
+              )
             )}
           </ul>
         )}
@@ -894,7 +965,9 @@ export function Sidebar({
                       Drop chats here, or leave them unfiled.
                     </li>
                   ) : (
-                    unfiledConversations.map(renderConversationRow)
+                    unfiledConversations.map((conversation) =>
+                      renderConversationRow(conversation),
+                    )
                   )}
                 </ul>
               )}

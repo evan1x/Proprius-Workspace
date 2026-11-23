@@ -37,4 +37,6 @@ export interface Folder {
   name: string;
   createdAt: number;
   sortOrder: number;
+  /** Preset color id from folderColors.ts */
+  color: string;
 }

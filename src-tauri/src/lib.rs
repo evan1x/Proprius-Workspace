@@ -295,6 +295,14 @@ pub fn run() {
         "#,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 4,
+            description: "add_folder_color",
+            sql: r#"
+            ALTER TABLE folders ADD COLUMN color TEXT NOT NULL DEFAULT 'slate';
+        "#,
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
