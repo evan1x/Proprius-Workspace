@@ -12,6 +12,7 @@ interface ConversationRow {
   id: string;
   title: string;
   updated_at: number;
+  folder_id?: string | null;
 }
 
 interface MessageRow {
@@ -32,12 +33,15 @@ async function getDb(): Promise<Database> {
   return dbPromise;
 }
 
-export function createEmptyConversation(): Conversation {
+export function createEmptyConversation(
+  folderId: string | null = null,
+): Conversation {
   return {
     id: crypto.randomUUID(),
     title: "New chat",
     updatedAt: Date.now(),
     messages: [],
+    folderId,
   };
 }
 
@@ -69,7 +73,9 @@ function mapMessage(row: MessageRow): ChatMessage {
 export async function listConversations(): Promise<Conversation[]> {
   const db = await getDb();
   const conversationRows = await db.select<ConversationRow[]>(
-    "SELECT id, title, updated_at FROM conversations ORDER BY updated_at DESC",
+    `SELECT id, title, updated_at, folder_id
+     FROM conversations
+     ORDER BY updated_at DESC`,
   );
 
   if (conversationRows.length === 0) {
@@ -93,6 +99,7 @@ export async function listConversations(): Promise<Conversation[]> {
     id: row.id,
     title: row.title,
     updatedAt: row.updated_at,
+    folderId: row.folder_id ?? null,
     messages: messagesByConversation.get(row.id) ?? [],
   }));
 }
@@ -101,27 +108,35 @@ export async function listConversations(): Promise<Conversation[]> {
  * Insert or update a conversation row.
  */
 export async function upsertConversation(
-  conversation: Pick<Conversation, "id" | "title" | "updatedAt">,
+  conversation: Pick<Conversation, "id" | "title" | "updatedAt" | "folderId">,
 ): Promise<void> {
   const db = await getDb();
   await db.execute(
-    `INSERT INTO conversations (id, title, updated_at)
-     VALUES ($1, $2, $3)
+    `INSERT INTO conversations (id, title, updated_at, folder_id)
+     VALUES ($1, $2, $3, $4)
      ON CONFLICT(id) DO UPDATE SET
        title = excluded.title,
-       updated_at = excluded.updated_at`,
-    [conversation.id, conversation.title, conversation.updatedAt],
+       updated_at = excluded.updated_at,
+       folder_id = COALESCE(excluded.folder_id, conversations.folder_id)`,
+    [
+      conversation.id,
+      conversation.title,
+      conversation.updatedAt,
+      conversation.folderId ?? null,
+    ],
   );
 }
 
 /**
  * Persist a message. Creates the conversation row if needed.
  * Pass `title` when the conversation title should be set/updated.
+ * Pass `folderId` so newly inserted chats keep their folder assignment.
  */
 export async function saveMessage(
   conversationId: string,
   message: ChatMessage,
   title?: string,
+  folderId?: string | null,
 ): Promise<void> {
   const db = await getDb();
   const updatedAt = Math.max(message.createdAt, Date.now());
@@ -129,25 +144,26 @@ export async function saveMessage(
     message.attachments && message.attachments.length > 0
       ? JSON.stringify(message.attachments)
       : null;
+  const nextTitle = title ?? "New chat";
 
-  if (title !== undefined) {
-    await db.execute(
-      `INSERT INTO conversations (id, title, updated_at)
-       VALUES ($1, $2, $3)
-       ON CONFLICT(id) DO UPDATE SET
-         title = excluded.title,
-         updated_at = excluded.updated_at`,
-      [conversationId, title, updatedAt],
-    );
-  } else {
-    await db.execute(
-      `INSERT INTO conversations (id, title, updated_at)
-       VALUES ($1, $2, $3)
-       ON CONFLICT(id) DO UPDATE SET
-         updated_at = excluded.updated_at`,
-      [conversationId, "New chat", updatedAt],
-    );
-  }
+  await db.execute(
+    `INSERT INTO conversations (id, title, updated_at, folder_id)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT(id) DO UPDATE SET
+       title = CASE
+         WHEN $5 = 1 THEN excluded.title
+         ELSE conversations.title
+       END,
+       updated_at = excluded.updated_at,
+       folder_id = COALESCE(conversations.folder_id, excluded.folder_id)`,
+    [
+      conversationId,
+      nextTitle,
+      updatedAt,
+      folderId ?? null,
+      title !== undefined ? 1 : 0,
+    ],
+  );
 
   await db.execute(
     `INSERT INTO messages (id, conversation_id, role, content, created_at, attachments_json)

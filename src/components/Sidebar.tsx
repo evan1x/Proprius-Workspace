@@ -1,14 +1,16 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import type { Conversation } from "../types/chat";
+import type { Conversation, Folder } from "../types/chat";
 
 const SIDEBAR_WIDTH_STORAGE_KEY = "proprius.conversationsSidebarWidth";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "proprius.conversationsSidebarCollapsed";
+const FOLDER_EXPANDED_STORAGE_KEY = "proprius.folderExpanded";
 const SIDEBAR_MIN_WIDTH = 200;
 const SIDEBAR_MAX_WIDTH = 480;
 const SIDEBAR_DEFAULT_WIDTH = 256;
@@ -52,16 +54,46 @@ function readStoredSidebarWidth(): number {
   }
 }
 
+function readExpandedFolders(): Record<string, boolean> {
+  try {
+    const raw = window.localStorage.getItem(FOLDER_EXPANDED_STORAGE_KEY);
+    if (!raw) return { __unfiled: true };
+    const parsed = JSON.parse(raw) as Record<string, boolean>;
+    return parsed && typeof parsed === "object" ? parsed : { __unfiled: true };
+  } catch {
+    return { __unfiled: true };
+  }
+}
+
+function saveExpandedFolders(value: Record<string, boolean>): void {
+  try {
+    window.localStorage.setItem(
+      FOLDER_EXPANDED_STORAGE_KEY,
+      JSON.stringify(value),
+    );
+  } catch {
+    // ignore storage failures
+  }
+}
+
 interface SidebarProps {
   conversations: Conversation[];
+  folders: Folder[];
   activeId: string | null;
   settingsOpen?: boolean;
   collapsed?: boolean;
   /** Hide entirely (used on narrow windows while a side panel is open). */
   hidden?: boolean;
   onSelect: (id: string) => void;
-  onNewChat: () => void;
+  onNewChat: (folderId?: string | null) => void;
   onDelete: (id: string) => void;
+  onNewFolder: () => Promise<Folder | null>;
+  onRenameFolder: (folderId: string, name: string) => void;
+  onDeleteFolder: (folderId: string) => void;
+  onMoveConversation: (
+    conversationId: string,
+    folderId: string | null,
+  ) => void;
   onOpenSettings?: () => void;
   onToggleCollapse?: () => void;
 }
@@ -76,8 +108,15 @@ function formatUpdatedAt(timestamp: number): string {
   return `${days}d ago`;
 }
 
+type OpenMenu =
+  | { type: "chat"; id: string }
+  | { type: "folder"; id: string }
+  | { type: "move"; id: string }
+  | null;
+
 export function Sidebar({
   conversations,
+  folders,
   activeId,
   settingsOpen = false,
   collapsed = false,
@@ -85,20 +124,48 @@ export function Sidebar({
   onSelect,
   onNewChat,
   onDelete,
+  onNewFolder,
+  onRenameFolder,
+  onDeleteFolder,
+  onMoveConversation,
   onOpenSettings,
   onToggleCollapse,
 }: SidebarProps) {
-  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState<OpenMenu>(null);
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   const [isResizing, setIsResizing] = useState(false);
+  const [expandedFolders, setExpandedFolders] = useState<
+    Record<string, boolean>
+  >({ __unfiled: true });
+  const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
   const resizeDragRef = useRef<{ startX: number; startWidth: number } | null>(
     null,
   );
   const sidebarWidthRef = useRef(sidebarWidth);
 
+  const unfiledConversations = useMemo(
+    () => conversations.filter((item) => !item.folderId),
+    [conversations],
+  );
+
+  const conversationsByFolder = useMemo(() => {
+    const map = new Map<string, Conversation[]>();
+    for (const folder of folders) map.set(folder.id, []);
+    for (const conversation of conversations) {
+      if (!conversation.folderId) continue;
+      const list = map.get(conversation.folderId);
+      if (list) list.push(conversation);
+      else map.set(conversation.folderId, [conversation]);
+    }
+    return map;
+  }, [conversations, folders]);
+
   useEffect(() => {
     setSidebarWidth(readStoredSidebarWidth());
+    setExpandedFolders(readExpandedFolders());
   }, []);
 
   useEffect(() => {
@@ -106,16 +173,22 @@ export function Sidebar({
   }, [sidebarWidth]);
 
   useEffect(() => {
-    if (!menuOpenId) return;
+    if (!renamingFolderId) return;
+    renameInputRef.current?.focus();
+    renameInputRef.current?.select();
+  }, [renamingFolderId]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
 
     function handlePointerDown(event: MouseEvent) {
       if (!menuRef.current?.contains(event.target as Node)) {
-        setMenuOpenId(null);
+        setMenuOpen(null);
       }
     }
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setMenuOpenId(null);
+      if (event.key === "Escape") setMenuOpen(null);
     }
 
     document.addEventListener("mousedown", handlePointerDown);
@@ -124,7 +197,7 @@ export function Sidebar({
       document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [menuOpenId]);
+  }, [menuOpen]);
 
   useEffect(() => {
     function handleWindowResize() {
@@ -145,7 +218,6 @@ export function Sidebar({
     function handlePointerMove(event: PointerEvent) {
       const drag = resizeDragRef.current;
       if (!drag) return;
-      // Right-edge drag: moving right widens the left sidebar.
       const viewportCap = Math.floor(window.innerWidth * 0.42);
       const nextWidth = Math.min(
         viewportCap,
@@ -180,6 +252,18 @@ export function Sidebar({
     };
   }, []);
 
+  function toggleFolderExpanded(key: string) {
+    setExpandedFolders((current) => {
+      const next = { ...current, [key]: !(current[key] ?? true) };
+      saveExpandedFolders(next);
+      return next;
+    });
+  }
+
+  function isFolderExpanded(key: string): boolean {
+    return expandedFolders[key] ?? true;
+  }
+
   function handleResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     if (collapsed) return;
     event.preventDefault();
@@ -210,6 +294,273 @@ export function Sidebar({
     });
   }
 
+  function commitRename() {
+    if (!renamingFolderId) return;
+    const nextName = renameValue.trim();
+    if (nextName) onRenameFolder(renamingFolderId, nextName);
+    setRenamingFolderId(null);
+    setRenameValue("");
+  }
+
+  function renderConversationRow(conversation: Conversation) {
+    const isActive = conversation.id === activeId;
+    const isMenuOpen =
+      menuOpen?.type === "chat" && menuOpen.id === conversation.id;
+    const isMoveOpen =
+      menuOpen?.type === "move" && menuOpen.id === conversation.id;
+
+    return (
+      <li key={conversation.id} className="relative px-2 py-0.5">
+        <div
+          className={`flex w-full items-stretch transition ${
+            isActive
+              ? "bg-surface text-ink"
+              : "bg-transparent text-ink hover:bg-hover"
+          }`}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setMenuOpen(null);
+              onSelect(conversation.id);
+            }}
+            className="min-w-0 flex-1 px-3 py-2.5 text-left"
+          >
+            <span className="block w-full truncate text-sm font-medium">
+              {conversation.title}
+            </span>
+            <span className="mt-1 block text-[10px] tracking-wide text-ink-muted">
+              {formatUpdatedAt(conversation.updatedAt)}
+            </span>
+          </button>
+
+          <div
+            ref={isMenuOpen || isMoveOpen ? menuRef : undefined}
+            className="relative flex items-start pt-1.5 pr-1.5"
+          >
+            <button
+              type="button"
+              aria-label={`Chat options for ${conversation.title}`}
+              aria-haspopup="menu"
+              aria-expanded={isMenuOpen || isMoveOpen}
+              onClick={(event) => {
+                event.stopPropagation();
+                setMenuOpen((current) =>
+                  current?.type === "chat" && current.id === conversation.id
+                    ? null
+                    : { type: "chat", id: conversation.id },
+                );
+              }}
+              className="flex h-7 w-7 items-center justify-center text-sm leading-none text-ink-muted transition hover:text-ink"
+            >
+              ⋮
+            </button>
+
+            {isMenuOpen && (
+              <div
+                role="menu"
+                className="absolute top-9 right-0 z-20 min-w-[8.5rem] border border-line bg-surface"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setMenuOpen({ type: "move", id: conversation.id });
+                  }}
+                  className="w-full px-3 py-2 text-left text-xs font-medium tracking-wide text-ink transition hover:bg-hover"
+                >
+                  Move to…
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setMenuOpen(null);
+                    onDelete(conversation.id);
+                  }}
+                  className="w-full px-3 py-2 text-left text-xs font-medium tracking-wide text-ink transition hover:bg-hover"
+                >
+                  Delete
+                </button>
+              </div>
+            )}
+
+            {isMoveOpen && (
+              <div
+                role="menu"
+                className="absolute top-9 right-0 z-30 max-h-56 min-w-[9rem] overflow-y-auto border border-line bg-surface"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!conversation.folderId}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setMenuOpen(null);
+                    onMoveConversation(conversation.id, null);
+                  }}
+                  className="w-full px-3 py-2 text-left text-xs font-medium tracking-wide text-ink transition hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Unfiled
+                </button>
+                {folders.map((folder) => (
+                  <button
+                    key={folder.id}
+                    type="button"
+                    role="menuitem"
+                    disabled={conversation.folderId === folder.id}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setMenuOpen(null);
+                      onMoveConversation(conversation.id, folder.id);
+                    }}
+                    className="w-full px-3 py-2 text-left text-xs font-medium tracking-wide text-ink transition hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {folder.name}
+                  </button>
+                ))}
+                {folders.length === 0 && (
+                  <p className="px-3 py-2 text-[10px] text-ink-muted">
+                    Create a folder first.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </li>
+    );
+  }
+
+  function renderFolderSection(folder: Folder) {
+    const items = conversationsByFolder.get(folder.id) ?? [];
+    const expanded = isFolderExpanded(folder.id);
+    const isMenuOpen =
+      menuOpen?.type === "folder" && menuOpen.id === folder.id;
+    const isRenaming = renamingFolderId === folder.id;
+
+    return (
+      <div key={folder.id} className="border-b border-line/60">
+        <div className="flex items-center gap-1 px-2 py-1">
+          <button
+            type="button"
+            onClick={() => toggleFolderExpanded(folder.id)}
+            className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left transition hover:bg-hover"
+            aria-expanded={expanded}
+          >
+            <span aria-hidden="true" className="text-[10px] text-ink-muted">
+              {expanded ? "▾" : "▸"}
+            </span>
+            {isRenaming ? (
+              <input
+                ref={renameInputRef}
+                value={renameValue}
+                onClick={(event) => event.stopPropagation()}
+                onChange={(event) => setRenameValue(event.target.value)}
+                onBlur={commitRename}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    commitRename();
+                  }
+                  if (event.key === "Escape") {
+                    setRenamingFolderId(null);
+                    setRenameValue("");
+                  }
+                }}
+                className="min-w-0 flex-1 border border-line bg-paper px-1.5 py-0.5 text-xs font-medium text-ink outline-none"
+              />
+            ) : (
+              <span className="min-w-0 flex-1 truncate text-[11px] font-medium uppercase tracking-[0.1em] text-ink-muted">
+                {folder.name}
+                <span className="ml-1.5 text-ink-muted/70">({items.length})</span>
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            title={`New chat in ${folder.name}`}
+            aria-label={`New chat in ${folder.name}`}
+            onClick={() => onNewChat(folder.id)}
+            className="flex h-7 w-7 items-center justify-center text-sm text-ink-muted transition hover:text-ink"
+          >
+            +
+          </button>
+
+          <div
+            ref={isMenuOpen ? menuRef : undefined}
+            className="relative"
+          >
+            <button
+              type="button"
+              aria-label={`Folder options for ${folder.name}`}
+              aria-haspopup="menu"
+              aria-expanded={isMenuOpen}
+              onClick={(event) => {
+                event.stopPropagation();
+                setMenuOpen((current) =>
+                  current?.type === "folder" && current.id === folder.id
+                    ? null
+                    : { type: "folder", id: folder.id },
+                );
+              }}
+              className="flex h-7 w-7 items-center justify-center text-sm leading-none text-ink-muted transition hover:text-ink"
+            >
+              ⋮
+            </button>
+            {isMenuOpen && (
+              <div
+                role="menu"
+                className="absolute top-8 right-0 z-20 min-w-[8rem] border border-line bg-surface"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setMenuOpen(null);
+                    setRenamingFolderId(folder.id);
+                    setRenameValue(folder.name);
+                  }}
+                  className="w-full px-3 py-2 text-left text-xs font-medium tracking-wide text-ink transition hover:bg-hover"
+                >
+                  Rename
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setMenuOpen(null);
+                    onDeleteFolder(folder.id);
+                  }}
+                  className="w-full px-3 py-2 text-left text-xs font-medium tracking-wide text-ink transition hover:bg-hover"
+                >
+                  Delete folder
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {expanded && (
+          <ul className="flex flex-col pb-1">
+            {items.length === 0 ? (
+              <li className="px-4 py-2 text-[10px] text-ink-muted">
+                No chats in this folder.
+              </li>
+            ) : (
+              items.map(renderConversationRow)
+            )}
+          </ul>
+        )}
+      </div>
+    );
+  }
+
   if (hidden) return null;
 
   if (collapsed) {
@@ -233,7 +584,7 @@ export function Sidebar({
             type="button"
             title="New chat"
             aria-label="New chat"
-            onClick={onNewChat}
+            onClick={() => onNewChat(null)}
             className="flex h-8 w-8 items-center justify-center border border-line bg-surface text-base font-medium leading-none text-ink transition hover:bg-hover"
           >
             +
@@ -301,98 +652,76 @@ export function Sidebar({
             ‹
           </button>
         </div>
-        <button
-          type="button"
-          onClick={onNewChat}
-          className="mt-3 w-full border border-line bg-surface px-3 py-2 text-xs font-medium tracking-wide text-ink transition hover:bg-hover"
-        >
-          New chat
-        </button>
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            onClick={() => onNewChat(null)}
+            className="min-w-0 flex-1 border border-line bg-surface px-3 py-2 text-xs font-medium tracking-wide text-ink transition hover:bg-hover"
+          >
+            New chat
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void (async () => {
+                const folder = await onNewFolder();
+                if (!folder) return;
+                setExpandedFolders((current) => {
+                  const next = { ...current, [folder.id]: true };
+                  saveExpandedFolders(next);
+                  return next;
+                });
+                setRenamingFolderId(folder.id);
+                setRenameValue(folder.name);
+              })();
+            }}
+            className="shrink-0 border border-line bg-surface px-3 py-2 text-xs font-medium tracking-wide text-ink transition hover:bg-hover"
+          >
+            New folder
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {conversations.length === 0 ? (
+        {conversations.length === 0 && folders.length === 0 ? (
           <p className="px-4 py-6 text-xs leading-relaxed text-ink-muted">
-            No saved chats yet. Send a prompt to create one.
+            No saved chats yet. Send a prompt to create one, or make a folder to
+            organize conversations.
           </p>
         ) : (
-          <ul className="flex flex-col py-1">
-            {conversations.map((conversation) => {
-              const isActive = conversation.id === activeId;
-              const isMenuOpen = menuOpenId === conversation.id;
+          <>
+            {folders.map(renderFolderSection)}
 
-              return (
-                <li key={conversation.id} className="relative px-2 py-0.5">
-                  <div
-                    className={`flex w-full items-stretch transition ${
-                      isActive
-                        ? "bg-surface text-ink"
-                        : "bg-transparent text-ink hover:bg-hover"
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMenuOpenId(null);
-                        onSelect(conversation.id);
-                      }}
-                      className="min-w-0 flex-1 px-3 py-2.5 text-left"
-                    >
-                      <span className="block w-full truncate text-sm font-medium">
-                        {conversation.title}
-                      </span>
-                      <span className="mt-1 block text-[10px] tracking-wide text-ink-muted">
-                        {formatUpdatedAt(conversation.updatedAt)}
-                      </span>
-                    </button>
-
-                    <div
-                      ref={isMenuOpen ? menuRef : undefined}
-                      className="relative flex items-start pt-1.5 pr-1.5"
-                    >
-                      <button
-                        type="button"
-                        aria-label={`Chat options for ${conversation.title}`}
-                        aria-haspopup="menu"
-                        aria-expanded={isMenuOpen}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setMenuOpenId((current) =>
-                            current === conversation.id
-                              ? null
-                              : conversation.id,
-                          );
-                        }}
-                        className="flex h-7 w-7 items-center justify-center text-sm leading-none text-ink-muted transition hover:text-ink"
-                      >
-                        ⋮
-                      </button>
-
-                      {isMenuOpen && (
-                        <div
-                          role="menu"
-                          className="absolute top-9 right-0 z-20 min-w-[7.5rem] border border-line bg-surface"
-                        >
-                          <button
-                            type="button"
-                            role="menuitem"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setMenuOpenId(null);
-                              onDelete(conversation.id);
-                            }}
-                            className="w-full px-3 py-2 text-left text-xs font-medium tracking-wide text-ink transition hover:bg-hover"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+            <div>
+              <button
+                type="button"
+                onClick={() => toggleFolderExpanded("__unfiled")}
+                className="flex w-full items-center gap-2 px-4 py-2 text-left transition hover:bg-hover"
+                aria-expanded={isFolderExpanded("__unfiled")}
+              >
+                <span aria-hidden="true" className="text-[10px] text-ink-muted">
+                  {isFolderExpanded("__unfiled") ? "▾" : "▸"}
+                </span>
+                <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-ink-muted">
+                  Unfiled
+                  <span className="ml-1.5 text-ink-muted/70">
+                    ({unfiledConversations.length})
+                  </span>
+                </span>
+              </button>
+              {isFolderExpanded("__unfiled") && (
+                <ul className="flex flex-col pb-1">
+                  {unfiledConversations.length === 0 ? (
+                    <li className="px-4 py-2 text-[10px] text-ink-muted">
+                      Chats without a folder appear here.
+                    </li>
+                  ) : (
+                    unfiledConversations.map(renderConversationRow)
+                  )}
+                </ul>
+              )}
+            </div>
+          </>
         )}
       </div>
 

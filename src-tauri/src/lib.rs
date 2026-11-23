@@ -273,6 +273,28 @@ pub fn run() {
         "#,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 3,
+            description: "add_conversation_folders",
+            sql: r#"
+            CREATE TABLE IF NOT EXISTS folders (
+              id TEXT PRIMARY KEY NOT NULL,
+              name TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              sort_order INTEGER NOT NULL DEFAULT 0
+            );
+
+            ALTER TABLE conversations ADD COLUMN folder_id TEXT
+              REFERENCES folders(id) ON DELETE SET NULL;
+
+            CREATE INDEX IF NOT EXISTS idx_conversations_folder_id
+              ON conversations(folder_id);
+
+            CREATE INDEX IF NOT EXISTS idx_folders_sort_order
+              ON folders(sort_order ASC, created_at ASC);
+        "#,
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

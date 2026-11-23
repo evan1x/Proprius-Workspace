@@ -24,6 +24,13 @@ import {
   saveMessage,
 } from "./services/conversations";
 import {
+  createFolder,
+  deleteFolder,
+  listFolders,
+  moveConversationToFolder,
+  renameFolder,
+} from "./services/folders";
+import {
   DEFAULT_MODEL,
   checkOllamaStatus,
   generateResponse,
@@ -35,6 +42,7 @@ import type {
   ChatAttachment,
   ChatMessage,
   Conversation,
+  Folder,
 } from "./types/chat";
 
 /** Below this width, Models/Settings overlay instead of splitting the chat. */
@@ -73,6 +81,7 @@ function sortByUpdatedAt(conversations: Conversation[]): Conversation[] {
 
 function App() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [folders, setFolders] = useState<Folder[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -173,8 +182,13 @@ function App() {
 
     async function loadConversations() {
       try {
-        const stored = await listConversations();
+        const [stored, storedFolders] = await Promise.all([
+          listConversations(),
+          listFolders(),
+        ]);
         if (cancelled) return;
+
+        setFolders(storedFolders);
 
         if (stored.length > 0) {
           setConversations(stored);
@@ -246,14 +260,94 @@ function App() {
     };
   }, [settingsOpen, modelsOpen]);
 
-  function handleNewChat() {
-    const conversation = createEmptyConversation();
+  function handleNewChat(folderId: string | null = null) {
+    const conversation = createEmptyConversation(folderId);
     setConversations((prev) => [
       conversation,
       ...prev.filter((item) => item.messages.length > 0),
     ]);
     setActiveId(conversation.id);
     setError(null);
+  }
+
+  async function handleNewFolder(): Promise<Folder | null> {
+    setError(null);
+    try {
+      const folder = await createFolder("New folder");
+      setFolders((prev) => [...prev, folder]);
+      return folder;
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to create folder.",
+      );
+      return null;
+    }
+  }
+
+  async function handleRenameFolder(folderId: string, name: string) {
+    setError(null);
+    const previous = folders;
+    setFolders((prev) =>
+      prev.map((folder) =>
+        folder.id === folderId ? { ...folder, name } : folder,
+      ),
+    );
+    try {
+      await renameFolder(folderId, name);
+    } catch (err) {
+      setFolders(previous);
+      setError(
+        err instanceof Error ? err.message : "Failed to rename folder.",
+      );
+    }
+  }
+
+  async function handleDeleteFolder(folderId: string) {
+    setError(null);
+    const previousFolders = folders;
+    const previousConversations = conversations;
+    setFolders((prev) => prev.filter((folder) => folder.id !== folderId));
+    setConversations((prev) =>
+      prev.map((conversation) =>
+        conversation.folderId === folderId
+          ? { ...conversation, folderId: null }
+          : conversation,
+      ),
+    );
+    try {
+      await deleteFolder(folderId);
+    } catch (err) {
+      setFolders(previousFolders);
+      setConversations(previousConversations);
+      setError(
+        err instanceof Error ? err.message : "Failed to delete folder.",
+      );
+    }
+  }
+
+  async function handleMoveConversation(
+    conversationId: string,
+    folderId: string | null,
+  ) {
+    setError(null);
+    const previous = conversations;
+    setConversations((prev) =>
+      prev.map((conversation) =>
+        conversation.id === conversationId
+          ? { ...conversation, folderId }
+          : conversation,
+      ),
+    );
+    try {
+      await moveConversationToFolder(conversationId, folderId);
+    } catch (err) {
+      setConversations(previous);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to move conversation.",
+      );
+    }
   }
 
   function handleSelect(id: string) {
@@ -318,11 +412,13 @@ function App() {
     let conversationId = activeId;
     let priorMessages: ChatMessage[] = [];
     let currentTitle = "New chat";
+    let folderId: string | null = null;
 
     if (!conversationId) {
       const conversation = createEmptyConversation();
       conversationId = conversation.id;
       currentTitle = conversation.title;
+      folderId = conversation.folderId ?? null;
       setConversations((prev) => [conversation, ...prev]);
       setActiveId(conversation.id);
     } else {
@@ -331,6 +427,7 @@ function App() {
       );
       priorMessages = existing?.messages ?? [];
       currentTitle = existing?.title ?? "New chat";
+      folderId = existing?.folderId ?? null;
     }
 
     const userMessage = createMessage("user", trimmedPrompt, attachments);
@@ -357,7 +454,7 @@ function App() {
     );
 
     try {
-      await saveMessage(conversationId, userMessage, nextTitle);
+      await saveMessage(conversationId, userMessage, nextTitle, folderId);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to save your message.";
@@ -390,7 +487,7 @@ function App() {
         ),
       );
 
-      await saveMessage(conversationId, assistantMessage);
+      await saveMessage(conversationId, assistantMessage, undefined, folderId);
       setOllamaStatus({ ok: true, model, modelAvailable: true });
     } catch (err) {
       const message =
@@ -415,6 +512,7 @@ function App() {
     <div className="relative flex h-full min-w-0 overflow-hidden bg-paper">
       <Sidebar
         conversations={conversations}
+        folders={folders}
         activeId={activeId}
         settingsOpen={settingsOpen}
         collapsed={sidebarCollapsed}
@@ -423,6 +521,16 @@ function App() {
         onNewChat={handleNewChat}
         onDelete={(id) => {
           void handleDelete(id);
+        }}
+        onNewFolder={handleNewFolder}
+        onRenameFolder={(folderId, name) => {
+          void handleRenameFolder(folderId, name);
+        }}
+        onDeleteFolder={(folderId) => {
+          void handleDeleteFolder(folderId);
+        }}
+        onMoveConversation={(conversationId, folderId) => {
+          void handleMoveConversation(conversationId, folderId);
         }}
         onToggleCollapse={handleToggleSidebarCollapse}
         onOpenSettings={() => {

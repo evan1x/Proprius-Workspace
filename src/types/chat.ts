@@ -28,4 +28,13 @@ export interface Conversation {
   title: string;
   updatedAt: number;
   messages: ChatMessage[];
+  /** Null / undefined = unfiled (not in a folder). */
+  folderId?: string | null;
+}
+
+export interface Folder {
+  id: string;
+  name: string;
+  createdAt: number;
+  sortOrder: number;
 }
