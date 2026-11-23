@@ -3,7 +3,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -12,8 +11,8 @@ import type { Conversation, Folder } from "../types/chat";
 const SIDEBAR_WIDTH_STORAGE_KEY = "proprius.conversationsSidebarWidth";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "proprius.conversationsSidebarCollapsed";
 const FOLDER_EXPANDED_STORAGE_KEY = "proprius.folderExpanded";
-const CONVERSATION_DRAG_TYPE = "application/x-proprius-conversation";
 const UNFILED_DROP_KEY = "__unfiled";
+const CHAT_DRAG_THRESHOLD_PX = 6;
 const SIDEBAR_MIN_WIDTH = 200;
 const SIDEBAR_MAX_WIDTH = 480;
 const SIDEBAR_DEFAULT_WIDTH = 256;
@@ -144,6 +143,11 @@ export function Sidebar({
   const [renameValue, setRenameValue] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
+  const [dragGhost, setDragGhost] = useState<{
+    x: number;
+    y: number;
+    title: string;
+  } | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const renameInputRef = useRef<HTMLInputElement | null>(null);
   const resizeDragRef = useRef<{ startX: number; startWidth: number } | null>(
@@ -152,6 +156,18 @@ export function Sidebar({
   const sidebarWidthRef = useRef(sidebarWidth);
   const conversationsRef = useRef(conversations);
   conversationsRef.current = conversations;
+  const dropTargetKeyRef = useRef<string | null>(null);
+  const suppressClickRef = useRef(false);
+  const chatDragRef = useRef<{
+    conversationId: string;
+    title: string;
+    pointerId: number;
+    startX: number;
+    startY: number;
+    activated: boolean;
+  } | null>(null);
+  const onMoveConversationRef = useRef(onMoveConversation);
+  onMoveConversationRef.current = onMoveConversation;
 
   const unfiledConversations = useMemo(
     () => conversations.filter((item) => !item.folderId),
@@ -309,71 +325,126 @@ export function Sidebar({
     setRenameValue("");
   }
 
-  function isConversationDrag(event: ReactDragEvent): boolean {
-    return Array.from(event.dataTransfer.types).includes(CONVERSATION_DRAG_TYPE);
-  }
-
-  function handleConversationDragStart(
-    event: ReactDragEvent<HTMLElement>,
-    conversationId: string,
-  ) {
-    event.dataTransfer.setData(CONVERSATION_DRAG_TYPE, conversationId);
-    event.dataTransfer.effectAllowed = "move";
-    setMenuOpen(null);
-    setDraggingId(conversationId);
-  }
-
-  function handleConversationDragEnd() {
-    setDraggingId(null);
-    setDropTargetKey(null);
-  }
-
-  function handleDropTargetDragOver(
-    event: ReactDragEvent<HTMLElement>,
-    targetKey: string,
-  ) {
-    if (!isConversationDrag(event)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    event.dataTransfer.dropEffect = "move";
-    if (dropTargetKey !== targetKey) setDropTargetKey(targetKey);
-    if (targetKey !== UNFILED_DROP_KEY && !isFolderExpanded(targetKey)) {
+  function setDropTarget(key: string | null) {
+    dropTargetKeyRef.current = key;
+    setDropTargetKey(key);
+    if (key && key !== UNFILED_DROP_KEY) {
       setExpandedFolders((current) => {
-        const next = { ...current, [targetKey]: true };
+        if (current[key] ?? true) return current;
+        const next = { ...current, [key]: true };
         saveExpandedFolders(next);
         return next;
       });
     }
   }
 
-  function handleDropTargetDragLeave(event: ReactDragEvent<HTMLElement>) {
-    if (!isConversationDrag(event)) return;
-    const nextTarget = event.relatedTarget as Node | null;
-    if (nextTarget && event.currentTarget.contains(nextTarget)) return;
-    setDropTargetKey((current) =>
-      current === event.currentTarget.dataset.dropKey ? null : current,
-    );
+  function clearChatDragStyles() {
+    document.body.style.userSelect = "";
+    document.body.style.cursor = "";
   }
 
-  function handleDropOnTarget(
-    event: ReactDragEvent<HTMLElement>,
-    folderId: string | null,
-  ) {
-    if (!isConversationDrag(event)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const conversationId =
-      event.dataTransfer.getData(CONVERSATION_DRAG_TYPE) || draggingId;
+  function endChatDrag(clientX: number, clientY: number) {
+    const drag = chatDragRef.current;
+    chatDragRef.current = null;
+    clearChatDragStyles();
     setDraggingId(null);
-    setDropTargetKey(null);
-    if (!conversationId) return;
+    setDragGhost(null);
 
+    if (!drag?.activated) {
+      setDropTarget(null);
+      return;
+    }
+
+    suppressClickRef.current = true;
+    window.setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 0);
+
+    const el = document.elementFromPoint(clientX, clientY);
+    const dropEl = el?.closest("[data-drop-key]") as HTMLElement | null;
+    const key = dropEl?.dataset.dropKey ?? dropTargetKeyRef.current;
+    setDropTarget(null);
+
+    if (!key) return;
+    const folderId = key === UNFILED_DROP_KEY ? null : key;
     const conversation = conversationsRef.current.find(
-      (item) => item.id === conversationId,
+      (item) => item.id === drag.conversationId,
     );
     const currentFolderId = conversation?.folderId ?? null;
     if (currentFolderId === folderId) return;
-    onMoveConversation(conversationId, folderId);
+    onMoveConversationRef.current(drag.conversationId, folderId);
+  }
+
+  useEffect(() => {
+    function handlePointerMove(event: PointerEvent) {
+      const drag = chatDragRef.current;
+      if (!drag || event.pointerId !== drag.pointerId) return;
+
+      if (!drag.activated) {
+        const distance = Math.hypot(
+          event.clientX - drag.startX,
+          event.clientY - drag.startY,
+        );
+        if (distance < CHAT_DRAG_THRESHOLD_PX) return;
+        drag.activated = true;
+        setMenuOpen(null);
+        setDraggingId(drag.conversationId);
+        document.body.style.userSelect = "none";
+        document.body.style.cursor = "grabbing";
+      }
+
+      const el = document.elementFromPoint(event.clientX, event.clientY);
+      const dropEl = el?.closest("[data-drop-key]") as HTMLElement | null;
+      setDropTarget(dropEl?.dataset.dropKey ?? null);
+      setDragGhost({
+        x: event.clientX,
+        y: event.clientY,
+        title: drag.title,
+      });
+    }
+
+    function handlePointerUp(event: PointerEvent) {
+      const drag = chatDragRef.current;
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      endChatDrag(event.clientX, event.clientY);
+    }
+
+    function handlePointerCancel(event: PointerEvent) {
+      const drag = chatDragRef.current;
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      chatDragRef.current = null;
+      clearChatDragStyles();
+      setDraggingId(null);
+      setDragGhost(null);
+      setDropTarget(null);
+    }
+
+    document.addEventListener("pointermove", handlePointerMove);
+    document.addEventListener("pointerup", handlePointerUp);
+    document.addEventListener("pointercancel", handlePointerCancel);
+    return () => {
+      document.removeEventListener("pointermove", handlePointerMove);
+      document.removeEventListener("pointerup", handlePointerUp);
+      document.removeEventListener("pointercancel", handlePointerCancel);
+    };
+  }, []);
+
+  function handleChatPointerDown(
+    event: ReactPointerEvent<HTMLElement>,
+    conversation: Conversation,
+  ) {
+    if (event.button !== 0) return;
+    if ((event.target as HTMLElement).closest("button[aria-haspopup='menu']")) {
+      return;
+    }
+    chatDragRef.current = {
+      conversationId: conversation.id,
+      title: conversation.title,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      activated: false,
+    };
   }
 
   function renderConversationRow(conversation: Conversation) {
@@ -387,14 +458,10 @@ export function Sidebar({
     return (
       <li key={conversation.id} className="relative px-2 py-0.5">
         <div
-          draggable
           title="Drag to a folder"
-          onDragStart={(event) =>
-            handleConversationDragStart(event, conversation.id)
-          }
-          onDragEnd={handleConversationDragEnd}
+          onPointerDown={(event) => handleChatPointerDown(event, conversation)}
           className={`flex w-full cursor-grab items-stretch transition active:cursor-grabbing ${
-            isDragging ? "opacity-45" : ""
+            isDragging ? "opacity-40" : ""
           } ${
             isActive
               ? "bg-surface text-ink"
@@ -403,8 +470,8 @@ export function Sidebar({
         >
           <button
             type="button"
-            draggable={false}
             onClick={() => {
+              if (suppressClickRef.current) return;
               setMenuOpen(null);
               onSelect(conversation.id);
             }}
@@ -530,9 +597,6 @@ export function Sidebar({
       <div
         key={folder.id}
         data-drop-key={folder.id}
-        onDragOver={(event) => handleDropTargetDragOver(event, folder.id)}
-        onDragLeave={handleDropTargetDragLeave}
-        onDrop={(event) => handleDropOnTarget(event, folder.id)}
         className={`border-b border-line/60 transition ${
           isDropTarget ? "bg-hover ring-1 ring-inset ring-ink/40" : ""
         }`}
@@ -712,9 +776,22 @@ export function Sidebar({
     <aside
       style={{ width: sidebarWidth, maxWidth: "42vw" }}
       className={`relative flex h-full min-w-0 shrink-0 flex-col border-r border-line bg-panel ${
-        isResizing ? "select-none" : ""
+        isResizing || draggingId ? "select-none" : ""
       }`}
     >
+      {dragGhost && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed z-[100] max-w-[12rem] truncate border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink shadow-sm"
+          style={{
+            left: dragGhost.x + 12,
+            top: dragGhost.y + 12,
+          }}
+        >
+          {dragGhost.title}
+        </div>
+      )}
+
       <div
         role="separator"
         aria-orientation="vertical"
@@ -788,11 +865,6 @@ export function Sidebar({
 
             <div
               data-drop-key={UNFILED_DROP_KEY}
-              onDragOver={(event) =>
-                handleDropTargetDragOver(event, UNFILED_DROP_KEY)
-              }
-              onDragLeave={handleDropTargetDragLeave}
-              onDrop={(event) => handleDropOnTarget(event, null)}
               className={`transition ${
                 dropTargetKey === UNFILED_DROP_KEY
                   ? "bg-hover ring-1 ring-inset ring-ink/40"
