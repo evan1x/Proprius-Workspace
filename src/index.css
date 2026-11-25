@@ -10,7 +10,7 @@
   --color-surface: #2e2e2e;
   --color-line: #3f3f3f;
   --color-hover: #353535;
-  --color-danger: #f4f4f4;
+  --color-danger: #ff6b6b;
 }
 
 @layer base {

@@ -559,7 +559,7 @@ export function Sidebar({
                     setMenuOpen(null);
                     onDelete(conversation.id);
                   }}
-                  className="w-full px-3 py-2 text-left text-xs font-medium tracking-wide text-ink transition hover:bg-hover"
+                  className="w-full px-3 py-2 text-left text-xs font-medium tracking-wide text-danger transition hover:bg-danger/15"
                 >
                   Delete
                 </button>
@@ -796,7 +796,7 @@ export function Sidebar({
                     setMenuOpen(null);
                     onDeleteFolder(folder.id);
                   }}
-                  className="w-full border-t border-line px-3 py-2 text-left text-xs font-medium tracking-wide text-ink transition hover:bg-hover"
+                  className="w-full border-t border-line px-3 py-2 text-left text-xs font-medium tracking-wide text-danger transition hover:bg-danger/15"
                 >
                   Delete folder
                 </button>
