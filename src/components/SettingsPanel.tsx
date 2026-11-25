@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   formatBytesAsGb,
   getHardwareInfo,
@@ -9,11 +16,33 @@ import {
   summarizeHardwareForSuggestions,
   type ModelSuggestion,
 } from "../services/modelSuggestions";
+import type { ThemeMode } from "../services/theme";
 import {
   UI_SCALE_MAX,
   UI_SCALE_MIN,
   UI_SCALE_STEP,
 } from "../services/uiScale";
+
+const PANEL_WIDTH_STORAGE_KEY = "proprius.settingsPanelWidth";
+const PANEL_MIN_WIDTH = 280;
+const PANEL_MAX_WIDTH = 720;
+const PANEL_DEFAULT_WIDTH = 384;
+
+function clampPanelWidth(width: number): number {
+  return Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, Math.round(width)));
+}
+
+function readStoredPanelWidth(): number {
+  try {
+    const stored = window.localStorage.getItem(PANEL_WIDTH_STORAGE_KEY);
+    if (!stored) return PANEL_DEFAULT_WIDTH;
+    const parsed = Number(stored);
+    if (!Number.isFinite(parsed)) return PANEL_DEFAULT_WIDTH;
+    return clampPanelWidth(parsed);
+  } catch {
+    return PANEL_DEFAULT_WIDTH;
+  }
+}
 
 export interface SuggestedInstallRequest {
   name: string;
@@ -30,6 +59,8 @@ interface SettingsPanelProps {
   installedModelNames?: string[];
   uiScale: number;
   onUiScaleChange: (scale: number) => void;
+  theme: ThemeMode;
+  onThemeChange: (theme: ThemeMode) => void;
 }
 
 function HardwareRow({ label, value }: { label: string; value: string }) {
@@ -66,6 +97,8 @@ export function SettingsPanel({
   installedModelNames = [],
   uiScale,
   onUiScaleChange,
+  theme,
+  onThemeChange,
 }: SettingsPanelProps) {
   const [hardware, setHardware] = useState<HardwareInfo | null>(null);
   const [loading, setLoading] = useState(false);
@@ -73,6 +106,12 @@ export function SettingsPanel({
   const [pendingInstall, setPendingInstall] = useState<ModelSuggestion | null>(
     null,
   );
+  const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT_WIDTH);
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeDragRef = useRef<{ startX: number; startWidth: number } | null>(
+    null,
+  );
+  const panelWidthRef = useRef(panelWidth);
 
   useEffect(() => {
     if (!open) {
@@ -112,7 +151,7 @@ export function SettingsPanel({
     if (!open) return;
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !resizeDragRef.current) {
         if (pendingInstall) {
           setPendingInstall(null);
           return;
@@ -124,6 +163,90 @@ export function SettingsPanel({
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [open, onClose, pendingInstall]);
+
+  useEffect(() => {
+    setPanelWidth(readStoredPanelWidth());
+  }, []);
+
+  useEffect(() => {
+    panelWidthRef.current = panelWidth;
+  }, [panelWidth]);
+
+  useEffect(() => {
+    function handleWindowResize() {
+      const maxWidth = Math.max(PANEL_MIN_WIDTH, window.innerWidth - 16);
+      setPanelWidth((current) => Math.min(current, maxWidth));
+    }
+
+    window.addEventListener("resize", handleWindowResize);
+    return () => window.removeEventListener("resize", handleWindowResize);
+  }, []);
+
+  useEffect(() => {
+    function handlePointerMove(event: PointerEvent) {
+      const drag = resizeDragRef.current;
+      if (!drag) return;
+      const maxWidth = Math.max(PANEL_MIN_WIDTH, window.innerWidth - 16);
+      const nextWidth = Math.min(
+        maxWidth,
+        clampPanelWidth(drag.startWidth + (drag.startX - event.clientX)),
+      );
+      setPanelWidth(nextWidth);
+    }
+
+    function endResize() {
+      if (!resizeDragRef.current) return;
+      resizeDragRef.current = null;
+      setIsResizing(false);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      try {
+        window.localStorage.setItem(
+          PANEL_WIDTH_STORAGE_KEY,
+          String(panelWidthRef.current),
+        );
+      } catch {
+        // ignore storage failures
+      }
+    }
+
+    document.addEventListener("pointermove", handlePointerMove);
+    document.addEventListener("pointerup", endResize);
+    document.addEventListener("pointercancel", endResize);
+    return () => {
+      document.removeEventListener("pointermove", handlePointerMove);
+      document.removeEventListener("pointerup", endResize);
+      document.removeEventListener("pointercancel", endResize);
+    };
+  }, []);
+
+  function handleResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    resizeDragRef.current = {
+      startX: event.clientX,
+      startWidth: panelWidth,
+    };
+    setIsResizing(true);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }
+
+  function handleResizeKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const delta = event.key === "ArrowLeft" ? 16 : -16;
+    setPanelWidth((current) => {
+      const next = clampPanelWidth(current + delta);
+      panelWidthRef.current = next;
+      try {
+        window.localStorage.setItem(PANEL_WIDTH_STORAGE_KEY, String(next));
+      } catch {
+        // ignore storage failures
+      }
+      return next;
+    });
+  }
 
   const suggestions = useMemo(
     () => (hardware ? suggestModelsForHardware(hardware, 3) : []),
@@ -140,16 +263,37 @@ export function SettingsPanel({
     ? `${hardware.cpuCoresPhysical || "—"} physical · ${hardware.cpuCoresLogical || "—"} logical`
     : "—";
 
+  const maxOverlayWidth =
+    typeof window === "undefined"
+      ? panelWidth
+      : Math.max(PANEL_MIN_WIDTH, window.innerWidth - 16);
+  const effectiveWidth = overlay
+    ? Math.min(panelWidth, maxOverlayWidth)
+    : panelWidth;
+
   return (
     <aside
       id="settings-side-panel"
       aria-label="Settings"
-      className={`side-panel flex h-full min-h-0 min-w-0 w-[min(24rem,100%)] flex-col overflow-hidden border-l border-line ${
-        overlay
-          ? "absolute inset-y-0 right-0 z-30"
-          : "relative shrink-0"
-      }`}
+      style={{ width: effectiveWidth, maxWidth: overlay ? "100%" : undefined }}
+      className={`side-panel relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-l border-line ${
+        overlay ? "absolute inset-y-0 right-0 z-30" : "shrink-0"
+      } ${isResizing ? "select-none" : ""}`}
     >
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize settings panel"
+        aria-valuemin={PANEL_MIN_WIDTH}
+        aria-valuemax={PANEL_MAX_WIDTH}
+        aria-valuenow={panelWidth}
+        tabIndex={0}
+        onPointerDown={handleResizePointerDown}
+        onKeyDown={handleResizeKeyDown}
+        className={`absolute top-0 left-0 z-10 h-full w-1.5 -translate-x-1/2 cursor-col-resize touch-none ${
+          isResizing ? "bg-ink/50" : "bg-transparent hover:bg-ink/25"
+        }`}
+      />
       <div className="flex items-start justify-between gap-3 border-b border-line px-4 py-3.5">
         <div className="min-w-0">
           <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
@@ -192,6 +336,30 @@ export function SettingsPanel({
             <span className="w-12 shrink-0 text-right text-sm font-medium text-ink">
               {uiScale}%
             </span>
+          </div>
+          <p className="mt-4 text-sm font-medium text-ink">Appearance</p>
+          <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+            Switch the workspace between dark and light.
+          </p>
+          <div className="mt-3 flex gap-2">
+            {(["dark", "light"] as const).map((option) => {
+              const selected = theme === option;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => onThemeChange(option)}
+                  className={`border px-3 py-2 text-xs font-medium uppercase tracking-wide transition ${
+                    selected
+                      ? "border-ink bg-ink text-paper"
+                      : "border-line bg-surface text-ink hover:bg-hover"
+                  }`}
+                >
+                  {option}
+                </button>
+              );
+            })}
           </div>
         </section>
 

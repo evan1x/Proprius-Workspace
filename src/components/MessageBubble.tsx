@@ -8,6 +8,8 @@ import { CodeBlock } from "./CodeBlock";
 
 interface MessageBubbleProps {
   message: ChatMessage;
+  /** True while this assistant reply is still being streamed. */
+  streaming?: boolean;
 }
 
 const markdownComponents: Components = {
@@ -42,7 +44,10 @@ const markdownComponents: Components = {
   },
 };
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+export function MessageBubble({
+  message,
+  streaming = false,
+}: MessageBubbleProps) {
   const isUser = message.role === "user";
   const attachments = message.attachments ?? [];
 
@@ -53,8 +58,8 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       <div
         className={
           isUser
-            ? "max-w-[min(52rem,92%)] rounded-2xl rounded-br-md bg-surface px-5 py-3 text-ink"
-            : "w-full rounded-2xl rounded-bl-md bg-panel px-5 py-3.5 text-ink"
+            ? "chat-bubble max-w-[min(52rem,92%)] rounded-2xl rounded-br-md bg-surface px-5 py-3 text-ink"
+            : "chat-bubble w-full rounded-2xl rounded-bl-md bg-panel px-5 py-3.5 text-ink"
         }
       >
         {!isUser && (
@@ -99,6 +104,12 @@ export function MessageBubble({ message }: MessageBubbleProps) {
               {message.content}
             </p>
           ) : null
+        ) : streaming && !message.content ? (
+          <span className="typing-dots" aria-label="Generating">
+            <span />
+            <span />
+            <span />
+          </span>
         ) : (
           <div className="markdown-body break-words text-[17px] leading-relaxed">
             <ReactMarkdown
@@ -108,6 +119,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             >
               {message.content}
             </ReactMarkdown>
+            {streaming && <span className="stream-caret" aria-hidden="true" />}
           </div>
         )}
       </div>

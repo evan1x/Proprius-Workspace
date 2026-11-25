@@ -74,6 +74,7 @@ interface OllamaChatResponse {
     role?: string;
     content?: string;
   };
+  done?: boolean;
   error?: string;
 }
 
@@ -720,11 +721,13 @@ export async function checkOllamaStatus(
 
 /**
  * Generate a reply from the local Ollama model using full chat history.
+ * Tokens are streamed; `onDelta` receives the accumulated reply so far.
  */
 export async function generateResponse(
   messages: ChatMessage[],
   model: string = DEFAULT_MODEL,
   parameters?: ModelParameters,
+  onDelta?: (content: string) => void,
 ): Promise<string> {
   const chatMessages = toOllamaMessages(messages);
   const systemPrompt = parameters?.systemPrompt?.trim();
@@ -742,7 +745,7 @@ export async function generateResponse(
     options?: Record<string, number | string[]>;
   } = {
     model,
-    stream: false,
+    stream: true,
     messages: chatMessages,
   };
 
@@ -781,12 +784,64 @@ export async function generateResponse(
     throw new Error(detail);
   }
 
-  const data = (await response.json()) as OllamaChatResponse;
-  const content = data.message?.content?.trim();
-
-  if (!content) {
+  if (!response.body) {
     throw new Error("Ollama returned an empty response.");
   }
 
-  return content;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let content = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      content = appendChatChunk(content, line, onDelta);
+    }
+  }
+
+  const trailing = buffer.trim();
+  if (trailing) {
+    content = appendChatChunk(content, trailing, onDelta);
+  }
+
+  const finalContent = content.trim();
+  if (!finalContent) {
+    throw new Error("Ollama returned an empty response.");
+  }
+
+  return finalContent;
+}
+
+function appendChatChunk(
+  content: string,
+  line: string,
+  onDelta?: (content: string) => void,
+): string {
+  const trimmed = line.trim();
+  if (!trimmed) return content;
+
+  let event: OllamaChatResponse;
+  try {
+    event = JSON.parse(trimmed) as OllamaChatResponse;
+  } catch {
+    return content;
+  }
+
+  if (event.error) {
+    throw new Error(event.error);
+  }
+
+  const piece = event.message?.content ?? "";
+  if (!piece) return content;
+
+  const next = content + piece;
+  onDelta?.(next);
+  return next;
 }

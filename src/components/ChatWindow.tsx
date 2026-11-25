@@ -5,9 +5,14 @@ import { MessageBubble } from "./MessageBubble";
 interface ChatWindowProps {
   messages: ChatMessage[];
   isGenerating: boolean;
+  streamingMessageId?: string | null;
 }
 
-export function ChatWindow({ messages, isGenerating }: ChatWindowProps) {
+export function ChatWindow({
+  messages,
+  isGenerating,
+  streamingMessageId = null,
+}: ChatWindowProps) {
   const endRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -32,16 +37,12 @@ export function ChatWindow({ messages, isGenerating }: ChatWindowProps) {
         )}
 
         {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} />
+          <MessageBubble
+            key={message.id}
+            message={message}
+            streaming={message.id === streamingMessageId}
+          />
         ))}
-
-        {isGenerating && (
-          <div className="flex justify-start">
-            <div className="rounded-2xl rounded-bl-md bg-panel px-4 py-3 text-sm text-ink-muted">
-              Generating…
-            </div>
-          </div>
-        )}
 
         <div ref={endRef} />
       </div>

@@ -7,6 +7,7 @@ import {
   type ExternalPullRequest,
 } from "./components/ModelSelector";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { applyTheme, loadTheme, saveTheme, type ThemeMode } from "./services/theme";
 import {
   applyUiScale,
   loadUiScale,
@@ -109,8 +110,35 @@ function App() {
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [uiScale, setUiScale] = useState(loadUiScale);
+  const [theme, setTheme] = useState<ThemeMode>(loadTheme);
   const chatInputRef = useRef<ChatInputHandle | null>(null);
   const dragDepthRef = useRef(0);
+  const conversationsRef = useRef(conversations);
+  const activeIdRef = useRef(activeId);
+  const modelRef = useRef(model);
+  const modelParametersRef = useRef(modelParameters);
+  const generationQueueRef = useRef(Promise.resolve());
+  const pendingGenerationsRef = useRef(0);
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(
+    null,
+  );
+
+  useEffect(() => {
+    conversationsRef.current = conversations;
+    activeIdRef.current = activeId;
+    modelRef.current = model;
+    modelParametersRef.current = modelParameters;
+  }, [conversations, activeId, model, modelParameters]);
+
+  function commitConversations(
+    updater: (prev: Conversation[]) => Conversation[],
+  ) {
+    setConversations((prev) => {
+      const next = updater(prev);
+      conversationsRef.current = next;
+      return next;
+    });
+  }
 
   useEffect(() => {
     setSidebarCollapsed(readSidebarCollapsed());
@@ -428,100 +456,201 @@ function App() {
     }
   }
 
+  function enqueueGeneration(task: () => Promise<void>) {
+    pendingGenerationsRef.current += 1;
+    setIsGenerating(true);
+    generationQueueRef.current = generationQueueRef.current
+      .catch(() => undefined)
+      .then(task)
+      .finally(() => {
+        pendingGenerationsRef.current -= 1;
+        if (pendingGenerationsRef.current === 0) {
+          setIsGenerating(false);
+          setStreamingMessageId(null);
+        }
+      });
+  }
+
   async function handleSend(prompt: string, attachments: ChatAttachment[] = []) {
     setError(null);
 
     const trimmedPrompt = prompt.trim();
     if (!trimmedPrompt && attachments.length === 0) return;
 
-    let conversationId = activeId;
-    let priorMessages: ChatMessage[] = [];
-    let currentTitle = "New chat";
-    let folderId: string | null = null;
+    const userMessage = createMessage("user", trimmedPrompt, attachments);
+    let conversationId = activeIdRef.current;
+    let created: Conversation | null = null;
 
     if (!conversationId) {
-      const conversation = createEmptyConversation();
-      conversationId = conversation.id;
-      currentTitle = conversation.title;
-      folderId = conversation.folderId ?? null;
-      setConversations((prev) => [conversation, ...prev]);
-      setActiveId(conversation.id);
-    } else {
-      const existing = conversations.find(
-        (conversation) => conversation.id === conversationId,
-      );
-      priorMessages = existing?.messages ?? [];
-      currentTitle = existing?.title ?? "New chat";
-      folderId = existing?.folderId ?? null;
+      created = createEmptyConversation();
+      conversationId = created.id;
+      activeIdRef.current = conversationId;
+      setActiveId(conversationId);
     }
 
-    const userMessage = createMessage("user", trimmedPrompt, attachments);
-    const nextMessages = [...priorMessages, userMessage];
-    const isFirstMessage = priorMessages.length === 0;
-    const nextTitle = isFirstMessage
-      ? titleFromPrompt(trimmedPrompt, attachments)
-      : currentTitle;
-    const updatedAt = Date.now();
+    const targetId = conversationId;
+    const existingNow = conversationsRef.current.find(
+      (conversation) => conversation.id === targetId,
+    );
+    const folderId = existingNow?.folderId ?? created?.folderId ?? null;
+    const nextTitle =
+      (existingNow?.messages.length ?? 0) === 0
+        ? titleFromPrompt(trimmedPrompt, attachments)
+        : (existingNow?.title ?? created?.title ?? "New chat");
 
-    setConversations((prev) =>
-      sortByUpdatedAt(
+    commitConversations((prev) => {
+      const existing = prev.find((conversation) => conversation.id === targetId);
+      const priorMessages = existing?.messages ?? [];
+      const title =
+        priorMessages.length === 0
+          ? titleFromPrompt(trimmedPrompt, attachments)
+          : (existing?.title ?? nextTitle);
+
+      const updated: Conversation = {
+        ...(existing ?? created!),
+        title,
+        updatedAt: Date.now(),
+        folderId: existing?.folderId ?? folderId,
+        messages: [...priorMessages, userMessage],
+      };
+
+      return sortByUpdatedAt([
+        updated,
+        ...prev.filter((conversation) => conversation.id !== targetId),
+      ]);
+    });
+
+    try {
+      await saveMessage(targetId, userMessage, nextTitle, folderId);
+    } catch (err) {
+      commitConversations((prev) =>
         prev.map((conversation) =>
-          conversation.id === conversationId
+          conversation.id === targetId
             ? {
                 ...conversation,
-                title: nextTitle,
-                updatedAt,
-                messages: nextMessages,
+                messages: conversation.messages.filter(
+                  (message) => message.id !== userMessage.id,
+                ),
               }
             : conversation,
         ),
-      ),
-    );
-
-    try {
-      await saveMessage(conversationId, userMessage, nextTitle, folderId);
-    } catch (err) {
+      );
       const message =
         err instanceof Error ? err.message : "Failed to save your message.";
       setError(message);
       return;
     }
 
-    setIsGenerating(true);
+    enqueueGeneration(() =>
+      generateForMessage(targetId, userMessage.id, folderId),
+    );
+  }
+
+  async function generateForMessage(
+    conversationId: string,
+    userMessageId: string,
+    folderId: string | null,
+  ) {
+    const conversation = conversationsRef.current.find(
+      (entry) => entry.id === conversationId,
+    );
+    const historyEnd = conversation?.messages.findIndex(
+      (message) => message.id === userMessageId,
+    );
+    if (!conversation || historyEnd === undefined || historyEnd < 0) return;
+
+    const history = conversation.messages
+      .slice(0, historyEnd + 1)
+      .filter(
+        (message) => message.role === "user" || message.content.trim().length > 0,
+      );
+
+    const assistantMessage = createMessage("assistant", "");
+    setStreamingMessageId(assistantMessage.id);
+    commitConversations((prev) =>
+      prev.map((entry) => {
+        if (entry.id !== conversationId) return entry;
+        const insertAt = entry.messages.findIndex(
+          (message) => message.id === userMessageId,
+        );
+        if (insertAt < 0) return entry;
+        const messages = [...entry.messages];
+        messages.splice(insertAt + 1, 0, assistantMessage);
+        return { ...entry, messages };
+      }),
+    );
+
+    const activeModel = modelRef.current;
 
     try {
       const reply = await generateResponse(
-        nextMessages,
-        model,
-        modelParameters,
+        history,
+        activeModel,
+        modelParametersRef.current,
+        (content) => {
+          commitConversations((prev) =>
+            prev.map((entry) =>
+              entry.id === conversationId
+                ? {
+                    ...entry,
+                    messages: entry.messages.map((message) =>
+                      message.id === assistantMessage.id
+                        ? { ...message, content }
+                        : message,
+                    ),
+                  }
+                : entry,
+            ),
+          );
+        },
       );
-      const assistantMessage = createMessage("assistant", reply);
-      const assistantUpdatedAt = Date.now();
+      const finishedMessage: ChatMessage = {
+        ...assistantMessage,
+        content: reply,
+      };
 
-      setConversations((prev) =>
+      commitConversations((prev) =>
         sortByUpdatedAt(
-          prev.map((conversation) =>
-            conversation.id === conversationId
+          prev.map((entry) =>
+            entry.id === conversationId
               ? {
-                  ...conversation,
-                  updatedAt: assistantUpdatedAt,
-                  messages: [...conversation.messages, assistantMessage],
+                  ...entry,
+                  updatedAt: Date.now(),
+                  messages: entry.messages.map((message) =>
+                    message.id === assistantMessage.id
+                      ? finishedMessage
+                      : message,
+                  ),
                 }
-              : conversation,
+              : entry,
           ),
         ),
       );
 
-      await saveMessage(conversationId, assistantMessage, undefined, folderId);
-      setOllamaStatus({ ok: true, model, modelAvailable: true });
+      await saveMessage(conversationId, finishedMessage, undefined, folderId);
+      setOllamaStatus({ ok: true, model: activeModel, modelAvailable: true });
     } catch (err) {
+      commitConversations((prev) =>
+        prev.map((entry) =>
+          entry.id === conversationId
+            ? {
+                ...entry,
+                messages: entry.messages.filter(
+                  (message) => message.id !== assistantMessage.id,
+                ),
+              }
+            : entry,
+        ),
+      );
       const message =
         err instanceof Error ? err.message : "Failed to generate a response.";
       setError(message);
-      const status = await checkOllamaStatus(model);
+      const status = await checkOllamaStatus(activeModel);
       setOllamaStatus(status);
     } finally {
-      setIsGenerating(false);
+      setStreamingMessageId((current) =>
+        current === assistantMessage.id ? null : current,
+      );
     }
   }
 
@@ -700,7 +829,11 @@ function App() {
           </p>
         </header>
 
-        <ChatWindow messages={messages} isGenerating={isGenerating} />
+        <ChatWindow
+          messages={messages}
+          isGenerating={isGenerating}
+          streamingMessageId={streamingMessageId}
+        />
 
         {error && (
           <div className="px-3 pb-2 sm:px-5 md:px-8">
@@ -712,7 +845,7 @@ function App() {
 
         <ChatInput
           ref={chatInputRef}
-          disabled={isGenerating || isLoading}
+          disabled={isLoading}
           onSend={handleSend}
         />
       </div>
@@ -771,6 +904,12 @@ function App() {
           setUiScale(scale);
           saveUiScale(scale);
           applyUiScale(scale);
+        }}
+        theme={theme}
+        onThemeChange={(next) => {
+          setTheme(next);
+          saveTheme(next);
+          applyTheme(next);
         }}
         onClose={() => setSettingsOpen(false)}
         installedModelNames={installedModels.map((entry) => entry.name)}

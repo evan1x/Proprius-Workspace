@@ -31,6 +31,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     const [attachError, setAttachError] = useState<string | null>(null);
     const [readingFiles, setReadingFiles] = useState(false);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const attachmentsRef = useRef(attachments);
     const readingFilesRef = useRef(readingFiles);
     const disabledRef = useRef(disabled);
@@ -103,6 +104,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       setValue("");
       setAttachments([]);
       setAttachError(null);
+      textareaRef.current?.focus();
     }
 
     function handleSubmit(event: FormEvent) {
@@ -167,6 +169,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               Prompt
             </label>
             <textarea
+              ref={textareaRef}
               id="prompt-input"
               rows={2}
               value={value}
