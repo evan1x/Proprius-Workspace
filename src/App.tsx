@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { ChatInput, type ChatInputHandle } from "./components/ChatInput";
 import { ChatWindow } from "./components/ChatWindow";
+import { FileViewer } from "./components/FileViewer";
 import { ModelParametersPanel } from "./components/ModelParametersPanel";
 import {
   ModelSelector,
@@ -40,8 +41,8 @@ import {
 import {
   deleteGeneratedFile,
   extractGeneratedFiles,
-  listGeneratedFiles,
   replaceGeneratedFilesForMessage,
+  syncGeneratedFilesFromConversations,
   type GeneratedFile,
 } from "./services/generatedFiles";
 import {
@@ -97,6 +98,7 @@ function App() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [generatedFiles, setGeneratedFiles] = useState<GeneratedFile[]>([]);
+  const [openFileId, setOpenFileId] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -162,6 +164,8 @@ function App() {
 
   const activeConversation =
     conversations.find((conversation) => conversation.id === activeId) ?? null;
+  const openFile =
+    generatedFiles.find((file) => file.id === openFileId) ?? null;
   const messages = activeConversation?.messages ?? [];
   const sidePanelOpen = modelsOpen || settingsOpen || parametersOpen;
   const overlayPanels = viewportWidth < OVERLAY_PANELS_BELOW;
@@ -233,7 +237,7 @@ function App() {
 
         setFolders(storedFolders);
         try {
-          const storedFiles = await listGeneratedFiles();
+          const storedFiles = await syncGeneratedFilesFromConversations(stored);
           if (!cancelled) setGeneratedFiles(storedFiles);
         } catch {
           // The files table arrives with the next app launch.
@@ -717,17 +721,12 @@ function App() {
           void handleMoveConversation(conversationId, folderId);
         }}
         onToggleCollapse={handleToggleSidebarCollapse}
-        onDeleteGeneratedFile={(fileId) => {
-          setGeneratedFiles((current) =>
-            current.filter((file) => file.id !== fileId),
-          );
-          void deleteGeneratedFile(fileId).catch((err) => {
-            setError(
-              err instanceof Error
-                ? err.message
-                : "Failed to delete generated file.",
-            );
-          });
+        openFileId={openFileId}
+        onOpenFile={(fileId) => {
+          setOpenFileId(fileId);
+          setModelsOpen(false);
+          setSettingsOpen(false);
+          setParametersOpen(false);
         }}
         onOpenSettings={() => {
           setSettingsOpen((current) => {
@@ -868,11 +867,36 @@ function App() {
           </p>
         </header>
 
-        <ChatWindow
-          messages={messages}
-          isGenerating={isGenerating}
-          streamingMessageId={streamingMessageId}
-        />
+        {openFile ? (
+          <FileViewer
+            file={openFile}
+            chatTitle={
+              conversations.find(
+                (conversation) => conversation.id === openFile.conversationId,
+              )?.title ?? "Unknown chat"
+            }
+            onClose={() => setOpenFileId(null)}
+            onDelete={(fileId) => {
+              setOpenFileId(null);
+              setGeneratedFiles((current) =>
+                current.filter((file) => file.id !== fileId),
+              );
+              void deleteGeneratedFile(fileId).catch((err) => {
+                setError(
+                  err instanceof Error
+                    ? err.message
+                    : "Failed to delete generated file.",
+                );
+              });
+            }}
+          />
+        ) : (
+          <ChatWindow
+            messages={messages}
+            isGenerating={isGenerating}
+            streamingMessageId={streamingMessageId}
+          />
+        )}
 
         {error && (
           <div className="px-3 pb-2 sm:px-5 md:px-8">
@@ -882,11 +906,13 @@ function App() {
           </div>
         )}
 
-        <ChatInput
-          ref={chatInputRef}
-          disabled={isLoading}
-          onSend={handleSend}
-        />
+        {!openFile && (
+          <ChatInput
+            ref={chatInputRef}
+            disabled={isLoading}
+            onSend={handleSend}
+          />
+        )}
       </div>
 
       {overlayPanels && sidePanelOpen && (

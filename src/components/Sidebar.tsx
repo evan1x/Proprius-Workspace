@@ -125,7 +125,8 @@ interface SidebarProps {
   ) => void;
   onOpenSettings?: () => void;
   onToggleCollapse?: () => void;
-  onDeleteGeneratedFile: (id: string) => void;
+  openFileId?: string | null;
+  onOpenFile: (id: string) => void;
 }
 
 function formatUpdatedAt(timestamp: number): string {
@@ -152,20 +153,37 @@ function fileLabel(name: string): string {
 function GeneratedFilesPane({
   files,
   conversations,
-  selectedFileId,
-  onSelectFile,
+  openFileId,
+  onOpenFile,
   onOpenConversation,
-  onDeleteFile,
 }: {
   files: GeneratedFile[];
   conversations: Conversation[];
-  selectedFileId: string | null;
-  onSelectFile: (id: string | null) => void;
+  openFileId: string | null;
+  onOpenFile: (id: string) => void;
   onOpenConversation: (id: string) => void;
-  onDeleteFile: (id: string) => void;
 }) {
-  const selected = files.find((file) => file.id === selectedFileId) ?? null;
-  const titles = new Map(conversations.map((item) => [item.id, item.title]));
+  const groups = useMemo(() => {
+    const titles = new Map(conversations.map((item) => [item.id, item.title]));
+    const byChat = new Map<string, GeneratedFile[]>();
+    for (const file of files) {
+      const list = byChat.get(file.conversationId) ?? [];
+      list.push(file);
+      byChat.set(file.conversationId, list);
+    }
+
+    return [...byChat.entries()]
+      .map(([conversationId, items]) => ({
+        conversationId,
+        title: titles.get(conversationId) ?? "Unknown chat",
+        latest: Math.max(...items.map((file) => file.createdAt)),
+        files: [...items].sort(
+          (a, b) =>
+            b.createdAt - a.createdAt || a.name.localeCompare(b.name),
+        ),
+      }))
+      .sort((a, b) => b.latest - a.latest || a.title.localeCompare(b.title));
+  }, [files, conversations]);
 
   return (
     <section
@@ -179,73 +197,58 @@ function GeneratedFilesPane({
         <p className="text-[10px] text-ink-muted">{files.length}</p>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {files.length === 0 ? (
+        {groups.length === 0 ? (
           <p className="px-4 py-4 text-xs leading-relaxed text-ink-muted">
-            Named files from assistant replies show up here. Ask for a file
-            such as <span className="text-ink">app.py</span>.
+            Every code block from assistant replies is collected here, grouped
+            by chat.
           </p>
         ) : (
-          <ul className="flex flex-col py-1">
-            {files.map((file) => {
-              const isSelected = file.id === selectedFileId;
-              const chatTitle = titles.get(file.conversationId) ?? "Chat";
-              return (
-                <li key={file.id}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSelectFile(isSelected ? null : file.id);
-                      onOpenConversation(file.conversationId);
-                    }}
-                    className={`flex w-full min-w-0 flex-col gap-0.5 px-4 py-2 text-left transition hover:bg-hover ${
-                      isSelected ? "bg-surface" : ""
-                    }`}
-                  >
-                    <span className="truncate text-xs font-medium text-ink">
-                      {fileLabel(file.name)}
-                    </span>
-                    <span className="truncate text-[10px] text-ink-muted">
-                      {chatTitle}
-                      {file.language ? ` · ${file.language}` : ""}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          <div className="flex flex-col gap-2.5 py-2.5">
+            {groups.map((group) => (
+              <section
+                key={group.conversationId}
+                className="mx-2 overflow-hidden rounded-sm border border-line/70 border-l-[6px] border-l-ink-muted bg-surface/30"
+              >
+                <button
+                  type="button"
+                  onClick={() => onOpenConversation(group.conversationId)}
+                  className="flex w-full items-center justify-between gap-2 border-b border-line/50 px-3 py-2 text-left transition hover:bg-hover"
+                >
+                  <span className="min-w-0 truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-ink">
+                    {group.title}
+                  </span>
+                  <span className="shrink-0 text-[10px] text-ink-muted">
+                    {group.files.length}
+                  </span>
+                </button>
+                <ul className="flex flex-col">
+                  {group.files.map((file) => {
+                    const isOpen = file.id === openFileId;
+                    return (
+                      <li key={file.id}>
+                        <button
+                          type="button"
+                          onClick={() => onOpenFile(file.id)}
+                          className={`flex w-full min-w-0 flex-col gap-0.5 px-3 py-2 text-left transition hover:bg-hover ${
+                            isOpen ? "bg-surface" : ""
+                          }`}
+                        >
+                          <span className="truncate text-xs font-medium text-ink">
+                            {fileLabel(file.name)}
+                          </span>
+                          <span className="truncate text-[10px] text-ink-muted">
+                            {file.language || "code"} · {formatUpdatedAt(file.createdAt)}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ))}
+          </div>
         )}
       </div>
-      {selected && (
-        <div className="border-t border-line px-3 py-2.5">
-          <p className="truncate text-[10px] font-medium text-ink">
-            {selected.name}
-          </p>
-          <pre className="mt-1.5 max-h-24 overflow-auto whitespace-pre-wrap break-words text-[10px] leading-relaxed text-ink-muted">
-            {selected.content}
-          </pre>
-          <div className="mt-2 flex gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                void navigator.clipboard.writeText(selected.content).catch(() => undefined);
-              }}
-              className="border border-line bg-surface px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-ink transition hover:bg-hover"
-            >
-              Copy
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                onDeleteFile(selected.id);
-                onSelectFile(null);
-              }}
-              className="border border-line px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-danger transition hover:bg-danger/15"
-            >
-              Delete
-            </button>
-          </div>
-        </div>
-      )}
     </section>
   );
 }
@@ -268,7 +271,8 @@ export function Sidebar({
   onMoveConversation,
   onOpenSettings,
   onToggleCollapse,
-  onDeleteGeneratedFile,
+  openFileId = null,
+  onOpenFile,
 }: SidebarProps) {
   const [menuOpen, setMenuOpen] = useState<OpenMenu>(null);
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
@@ -281,7 +285,6 @@ export function Sidebar({
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [filesSplit, setFilesSplit] = useState(FILES_SPLIT_DEFAULT);
   const [isSplitting, setIsSplitting] = useState(false);
-  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
   const [dragGhost, setDragGhost] = useState<{
     x: number;
@@ -1244,10 +1247,9 @@ export function Sidebar({
       <GeneratedFilesPane
         files={generatedFiles}
         conversations={conversations}
-        selectedFileId={selectedFileId}
-        onSelectFile={setSelectedFileId}
+        openFileId={openFileId}
+        onOpenFile={onOpenFile}
         onOpenConversation={onSelect}
-        onDeleteFile={onDeleteGeneratedFile}
       />
       </div>
 

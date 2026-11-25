@@ -284,6 +284,13 @@
     background: #111111;
   }
 
+  .file-view-gutter {
+    color: #8d8d8d;
+    font-family: "IBM Plex Mono", "Consolas", "Courier New", monospace;
+    font-size: 0.88em;
+    line-height: 1.6;
+  }
+
   .markdown-body .code-block > div:first-child {
     background: #1a1a1a;
   }
