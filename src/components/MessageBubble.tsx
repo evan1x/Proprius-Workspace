@@ -53,8 +53,8 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       <div
         className={
           isUser
-            ? "max-w-[min(40rem,85%)] rounded-2xl rounded-br-md bg-surface px-4 py-2.5 text-ink"
-            : "w-full rounded-2xl rounded-bl-md bg-panel px-4 py-3 text-ink"
+            ? "max-w-[min(52rem,92%)] rounded-2xl rounded-br-md bg-surface px-5 py-3 text-ink"
+            : "w-full rounded-2xl rounded-bl-md bg-panel px-5 py-3.5 text-ink"
         }
       >
         {!isUser && (
@@ -95,12 +95,12 @@ export function MessageBubble({ message }: MessageBubbleProps) {
 
         {isUser ? (
           message.content.trim() ? (
-            <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed">
+            <p className="whitespace-pre-wrap break-words text-[17px] leading-relaxed">
               {message.content}
             </p>
           ) : null
         ) : (
-          <div className="markdown-body break-words text-[15px] leading-relaxed">
+          <div className="markdown-body break-words text-[17px] leading-relaxed">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               rehypePlugins={[[rehypeHighlight, { detect: true }]]}

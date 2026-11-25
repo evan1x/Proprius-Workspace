@@ -8,6 +8,11 @@ import {
 } from "./components/ModelSelector";
 import { SettingsPanel } from "./components/SettingsPanel";
 import {
+  applyUiScale,
+  loadUiScale,
+  saveUiScale,
+} from "./services/uiScale";
+import {
   Sidebar,
   readSidebarCollapsed,
   saveSidebarCollapsed,
@@ -103,6 +108,7 @@ function App() {
   );
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [uiScale, setUiScale] = useState(loadUiScale);
   const chatInputRef = useRef<ChatInputHandle | null>(null);
   const dragDepthRef = useRef(0);
 
@@ -582,10 +588,10 @@ function App() {
           </div>
         )}
 
-        <header className="border-b border-line bg-paper px-3 py-3 sm:px-5 sm:py-3.5">
-          <div className="flex items-center justify-between gap-2 sm:gap-4">
+        <header className="border-b border-line bg-paper px-4 py-4 sm:px-6">
+          <div className="flex items-center justify-between gap-3 sm:gap-4">
             <div className="min-w-0">
-              <h1 className="truncate text-base font-semibold tracking-tight text-ink sm:text-lg">
+              <h1 className="truncate text-lg font-semibold tracking-tight text-ink sm:text-xl">
                 Proprius Workspace
               </h1>
               <p className="mt-1 truncate text-xs text-ink-muted sm:text-sm">
@@ -698,7 +704,7 @@ function App() {
 
         {error && (
           <div className="px-3 pb-2 sm:px-5 md:px-8">
-            <p className="mx-auto max-w-5xl border border-line bg-surface px-3 py-2 text-sm text-ink">
+            <p className="mx-auto max-w-6xl border border-line bg-surface px-3 py-2 text-sm text-ink">
               {error}
             </p>
           </div>
@@ -760,6 +766,12 @@ function App() {
       <SettingsPanel
         open={settingsOpen}
         overlay={overlayPanels}
+        uiScale={uiScale}
+        onUiScaleChange={(scale) => {
+          setUiScale(scale);
+          saveUiScale(scale);
+          applyUiScale(scale);
+        }}
         onClose={() => setSettingsOpen(false)}
         installedModelNames={installedModels.map((entry) => entry.name)}
         onInstallSuggestion={(request) => {

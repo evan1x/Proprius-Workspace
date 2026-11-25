@@ -124,9 +124,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     return (
       <form
         onSubmit={handleSubmit}
-        className="border-t border-line bg-paper px-3 py-3 sm:px-5 sm:py-4 md:px-8"
+        className="border-t border-line bg-paper px-4 py-4 sm:px-6"
       >
-        <div className="mx-auto w-full max-w-5xl">
+        <div className="mx-auto w-full max-w-6xl">
           {(attachments.length > 0 || attachError) && (
             <div className="mb-2 space-y-2">
               {attachments.length > 0 && (
@@ -178,7 +178,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                   ? "Add a prompt for the attached file(s)… (Enter to send)"
                   : "Write a prompt or drop files… (Enter to send)"
               }
-              className="min-h-[3.25rem] flex-1 resize-none border-0 bg-transparent px-3.5 py-2.5 text-[15px] text-ink outline-none placeholder:text-ink-muted focus-visible:outline-none disabled:opacity-50"
+              className="min-h-[4.25rem] flex-1 resize-none border-0 bg-transparent px-4 py-3 text-[17px] text-ink outline-none placeholder:text-ink-muted focus-visible:outline-none disabled:opacity-50"
             />
             <input
               ref={fileInputRef}
@@ -210,7 +210,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             <button
               type="submit"
               disabled={!canSend}
-              className="shrink-0 border-l border-line bg-ink px-5 text-sm font-medium tracking-wide text-paper transition hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:bg-surface disabled:text-ink-muted disabled:opacity-60"
+              className="shrink-0 border-l border-line bg-ink px-6 text-base font-medium tracking-wide text-paper transition hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:bg-surface disabled:text-ink-muted disabled:opacity-60"
             >
               {readingFiles ? "…" : "Send"}
             </button>

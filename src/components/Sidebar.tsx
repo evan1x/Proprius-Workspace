@@ -12,14 +12,14 @@ import {
   getFolderColor,
 } from "../types/folderColors";
 
-const SIDEBAR_WIDTH_STORAGE_KEY = "proprius.conversationsSidebarWidth";
+const SIDEBAR_WIDTH_STORAGE_KEY = "proprius.conversationsSidebarWidth.v2";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "proprius.conversationsSidebarCollapsed";
 const FOLDER_EXPANDED_STORAGE_KEY = "proprius.folderExpanded";
 const UNFILED_DROP_KEY = "__unfiled";
 const CHAT_DRAG_THRESHOLD_PX = 6;
 const SIDEBAR_MIN_WIDTH = 200;
 const SIDEBAR_MAX_WIDTH = 480;
-const SIDEBAR_DEFAULT_WIDTH = 256;
+const SIDEBAR_DEFAULT_WIDTH = 304;
 const SIDEBAR_COLLAPSED_WIDTH = 52;
 
 export function readSidebarCollapsed(): boolean {

@@ -9,6 +9,11 @@ import {
   summarizeHardwareForSuggestions,
   type ModelSuggestion,
 } from "../services/modelSuggestions";
+import {
+  UI_SCALE_MAX,
+  UI_SCALE_MIN,
+  UI_SCALE_STEP,
+} from "../services/uiScale";
 
 export interface SuggestedInstallRequest {
   name: string;
@@ -23,6 +28,8 @@ interface SettingsPanelProps {
   /** Opens the models panel and starts the pull confirm flow for this model. */
   onInstallSuggestion: (request: SuggestedInstallRequest) => void;
   installedModelNames?: string[];
+  uiScale: number;
+  onUiScaleChange: (scale: number) => void;
 }
 
 function HardwareRow({ label, value }: { label: string; value: string }) {
@@ -57,6 +64,8 @@ export function SettingsPanel({
   onClose,
   onInstallSuggestion,
   installedModelNames = [],
+  uiScale,
+  onUiScaleChange,
 }: SettingsPanelProps) {
   const [hardware, setHardware] = useState<HardwareInfo | null>(null);
   const [loading, setLoading] = useState(false);
@@ -147,7 +156,7 @@ export function SettingsPanel({
             Settings
           </p>
           <p className="mt-1 text-sm font-medium tracking-wide text-ink">
-            Hardware
+            Appearance and hardware
           </p>
         </div>
         <button
@@ -161,6 +170,31 @@ export function SettingsPanel({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
+        <section className="border-b border-line px-4 py-4">
+          <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
+            Interface
+          </p>
+          <p className="mt-1 text-sm font-medium text-ink">Scale</p>
+          <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+            Makes text and spacing larger or smaller across the workspace.
+          </p>
+          <div className="mt-3 flex items-center gap-3">
+            <input
+              type="range"
+              min={UI_SCALE_MIN}
+              max={UI_SCALE_MAX}
+              step={UI_SCALE_STEP}
+              value={uiScale}
+              aria-label="Interface scale"
+              onChange={(event) => onUiScaleChange(Number(event.target.value))}
+              className="min-w-0 flex-1 accent-ink"
+            />
+            <span className="w-12 shrink-0 text-right text-sm font-medium text-ink">
+              {uiScale}%
+            </span>
+          </div>
+        </section>
+
         <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
           <p className="text-[10px] uppercase tracking-wide text-ink-muted">
             Detected hardware
