@@ -99,6 +99,10 @@ function App() {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [generatedFiles, setGeneratedFiles] = useState<GeneratedFile[]>([]);
   const [openFileId, setOpenFileId] = useState<string | null>(null);
+  const [focusMessage, setFocusMessage] = useState<{
+    id: string;
+    nonce: number;
+  } | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -423,6 +427,7 @@ function App() {
 
   function handleSelect(id: string) {
     setActiveId(id);
+    setFocusMessage(null);
     setError(null);
   }
 
@@ -494,6 +499,7 @@ function App() {
 
   async function handleSend(prompt: string, attachments: ChatAttachment[] = []) {
     setError(null);
+    setFocusMessage(null);
 
     const trimmedPrompt = prompt.trim();
     if (!trimmedPrompt && attachments.length === 0) return;
@@ -876,6 +882,14 @@ function App() {
               )?.title ?? "Unknown chat"
             }
             onClose={() => setOpenFileId(null)}
+            onOpenChat={() => {
+              setActiveId(openFile.conversationId);
+              setFocusMessage((current) => ({
+                id: openFile.messageId,
+                nonce: (current?.nonce ?? 0) + 1,
+              }));
+              setOpenFileId(null);
+            }}
             onDelete={(fileId) => {
               setOpenFileId(null);
               setGeneratedFiles((current) =>
@@ -895,6 +909,8 @@ function App() {
             messages={messages}
             isGenerating={isGenerating}
             streamingMessageId={streamingMessageId}
+            focusMessageId={focusMessage?.id ?? null}
+            focusNonce={focusMessage?.nonce ?? 0}
           />
         )}
 

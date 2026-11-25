@@ -6,18 +6,36 @@ interface ChatWindowProps {
   messages: ChatMessage[];
   isGenerating: boolean;
   streamingMessageId?: string | null;
+  /** Scroll this message into view instead of the latest reply. */
+  focusMessageId?: string | null;
+  focusNonce?: number;
 }
 
 export function ChatWindow({
   messages,
   isGenerating,
   streamingMessageId = null,
+  focusMessageId = null,
+  focusNonce = 0,
 }: ChatWindowProps) {
   const endRef = useRef<HTMLDivElement | null>(null);
+  const scrolledFocusRef = useRef<string | null>(null);
 
   useEffect(() => {
+    if (focusMessageId) {
+      const mark = `${focusMessageId}:${focusNonce}`;
+      if (scrolledFocusRef.current === mark) return;
+      const node = document.getElementById(`message-${focusMessageId}`);
+      if (!node) {
+        endRef.current?.scrollIntoView({ behavior: "smooth" });
+        return;
+      }
+      scrolledFocusRef.current = mark;
+      node.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isGenerating]);
+  }, [messages, isGenerating, focusMessageId, focusNonce]);
 
   const isEmpty = messages.length === 0;
 
@@ -36,13 +54,21 @@ export function ChatWindow({
           </div>
         )}
 
-        {messages.map((message) => (
-          <MessageBubble
-            key={message.id}
-            message={message}
-            streaming={message.id === streamingMessageId}
-          />
-        ))}
+        {messages.map((message) => {
+          const focused = message.id === focusMessageId;
+          return (
+            <div
+              key={focused ? `${message.id}:${focusNonce}` : message.id}
+              id={`message-${message.id}`}
+              className={focused ? "message-focus" : undefined}
+            >
+              <MessageBubble
+                message={message}
+                streaming={message.id === streamingMessageId}
+              />
+            </div>
+          );
+        })}
 
         <div ref={endRef} />
       </div>

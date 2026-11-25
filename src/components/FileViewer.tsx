@@ -6,6 +6,7 @@ interface FileViewerProps {
   file: GeneratedFile;
   chatTitle: string;
   onClose: () => void;
+  onOpenChat: () => void;
   onDelete: (id: string) => void;
 }
 
@@ -25,6 +26,7 @@ export function FileViewer({
   file,
   chatTitle,
   onClose,
+  onOpenChat,
   onDelete,
 }: FileViewerProps) {
   const [copied, setCopied] = useState(false);
@@ -75,6 +77,13 @@ export function FileViewer({
           </div>
         </div>
         <div className="flex shrink-0 gap-2">
+          <button
+            type="button"
+            onClick={onOpenChat}
+            className="border border-line bg-surface px-2.5 py-1.5 text-xs font-medium tracking-wide text-ink transition hover:bg-hover"
+          >
+            Open chat
+          </button>
           <button
             type="button"
             onClick={() => {

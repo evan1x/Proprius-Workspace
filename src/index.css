@@ -172,6 +172,15 @@
   }
 }
 
+@keyframes message-focus {
+  0% {
+    box-shadow: 0 0 0 2px var(--color-ink);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
 @keyframes caret-blink {
   0%,
   45% {
@@ -188,7 +197,8 @@
   .side-panel-left,
   .panel-backdrop,
   .typing-dots span,
-  .stream-caret {
+  .stream-caret,
+  .message-focus {
     animation: none;
   }
 }
@@ -282,6 +292,11 @@
 
   .markdown-body .code-block {
     background: #111111;
+  }
+
+  .message-focus {
+    border-radius: 1rem;
+    animation: message-focus 1.8s ease-out;
   }
 
   .file-view-gutter {
