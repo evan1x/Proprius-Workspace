@@ -356,7 +356,7 @@ export function ModelParametersPanel({
       id="model-parameters-panel"
       aria-label="Model parameters"
       style={{ width: effectiveWidth, maxWidth: overlay ? "100%" : undefined }}
-      className={`relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-l border-line bg-panel ${
+      className={`side-panel relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-l border-line ${
         overlay ? "absolute inset-y-0 right-0 z-30" : "shrink-0"
       } ${isResizing ? "select-none" : ""}`}
     >

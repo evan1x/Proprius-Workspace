@@ -650,16 +650,31 @@ function App() {
                     return next;
                   })
                 }
-                className="group border border-line bg-panel px-2.5 py-2 text-right transition hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40 sm:px-3"
+                className={`group border border-line px-2.5 py-2 text-right transition disabled:cursor-not-allowed disabled:opacity-40 sm:px-3 ${
+                  modelsOpen
+                    ? "bg-ink text-paper"
+                    : "bg-panel text-ink hover:bg-hover"
+                }`}
               >
-                <p className="text-[10px] uppercase tracking-[0.12em] text-ink-muted">
+                <p
+                  className={`text-[10px] uppercase tracking-[0.12em] ${
+                    modelsOpen ? "text-paper/70" : "text-ink-muted"
+                  }`}
+                >
                   Model
                 </p>
-                <p className="mt-0.5 flex items-center justify-end gap-2 text-xs font-medium tracking-wide text-ink">
+                <p
+                  className={`mt-0.5 flex items-center justify-end gap-2 text-xs font-medium tracking-wide ${
+                    modelsOpen ? "text-paper" : "text-ink"
+                  }`}
+                >
                   <span className="max-w-[6.5rem] truncate sm:max-w-[9rem]">
                     {model}
                   </span>
-                  <span aria-hidden="true" className="text-ink-muted">
+                  <span
+                    aria-hidden="true"
+                    className={modelsOpen ? "text-paper/70" : "text-ink-muted"}
+                  >
                     {modelsOpen ? "›" : "‹"}
                   </span>
                 </p>
@@ -700,7 +715,7 @@ function App() {
         <button
           type="button"
           aria-label="Close side panel"
-          className="absolute inset-0 z-20 bg-paper/60"
+          className="panel-backdrop absolute inset-0 z-20"
           onClick={() => {
             setModelsOpen(false);
             setSettingsOpen(false);

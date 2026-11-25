@@ -50,6 +50,61 @@
 }
 
 @layer components {
+  .side-panel {
+    background-color: var(--color-panel);
+    animation: panel-in-right 220ms ease-out;
+  }
+
+  .side-panel-left {
+    animation-name: panel-in-left;
+  }
+
+  .panel-backdrop {
+    background: color-mix(in srgb, var(--color-paper) 60%, transparent);
+    animation: backdrop-in 180ms ease-out;
+  }
+}
+
+@keyframes panel-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes panel-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .side-panel,
+  .side-panel-left,
+  .panel-backdrop {
+    animation: none;
+  }
+}
+
+@layer components {
   .markdown-body > *:first-child {
     margin-top: 0;
   }

@@ -580,7 +580,7 @@ export function ModelSelector({
       id="models-side-panel"
       aria-label="Manage Ollama models"
       style={{ width: effectiveWidth, maxWidth: overlay ? "100%" : undefined }}
-      className={`flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-l border-line bg-panel ${
+      className={`side-panel flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-l border-line ${
         overlay
           ? "absolute inset-y-0 right-0 z-30 shadow-none"
           : "relative shrink-0"
@@ -946,10 +946,8 @@ export function ModelSelector({
                       }}
                       aria-label={`Remove ${entry.name}`}
                       title="Remove from this machine"
-                      className={`shrink-0 border-l border-line px-2 text-[10px] font-medium uppercase tracking-wide transition disabled:opacity-40 sm:px-3 ${
-                        isSelected
-                          ? "text-paper hover:bg-paper hover:text-ink"
-                          : "text-ink-muted hover:bg-ink hover:text-paper"
+                      className={`shrink-0 border-l border-line px-2 text-[10px] font-medium uppercase tracking-wide transition hover:bg-danger/15 hover:text-danger disabled:opacity-40 sm:px-3 ${
+                        isSelected ? "text-paper" : "text-ink-muted"
                       }`}
                     >
                       Remove

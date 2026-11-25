@@ -829,8 +829,9 @@ export function Sidebar({
   if (collapsed) {
     return (
       <aside
+        key="collapsed"
         style={{ width: SIDEBAR_COLLAPSED_WIDTH }}
-        className="relative flex h-full shrink-0 flex-col items-center border-r border-line bg-panel"
+        className="side-panel side-panel-left relative flex h-full shrink-0 flex-col items-center border-r border-line bg-panel"
       >
         <div className="flex w-full flex-col items-center gap-2 border-b border-line px-2 py-3">
           <button
@@ -879,8 +880,9 @@ export function Sidebar({
 
   return (
     <aside
+      key="expanded"
       style={{ width: sidebarWidth, maxWidth: "42vw" }}
-      className={`relative flex h-full min-w-0 shrink-0 flex-col border-r border-line bg-panel ${
+      className={`side-panel side-panel-left relative flex h-full min-w-0 shrink-0 flex-col border-r border-line bg-panel ${
         isResizing || draggingId ? "select-none" : ""
       }`}
     >

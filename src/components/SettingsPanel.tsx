@@ -135,7 +135,7 @@ export function SettingsPanel({
     <aside
       id="settings-side-panel"
       aria-label="Settings"
-      className={`flex h-full min-h-0 min-w-0 w-[min(24rem,100%)] flex-col overflow-hidden border-l border-line bg-panel ${
+      className={`side-panel flex h-full min-h-0 min-w-0 w-[min(24rem,100%)] flex-col overflow-hidden border-l border-line ${
         overlay
           ? "absolute inset-y-0 right-0 z-30"
           : "relative shrink-0"
