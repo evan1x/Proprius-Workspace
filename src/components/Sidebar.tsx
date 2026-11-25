@@ -474,6 +474,11 @@ export function Sidebar({
         <div
           title="Drag to a folder"
           onPointerDown={(event) => handleChatPointerDown(event, conversation)}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setMenuOpen({ type: "chat", id: conversation.id });
+          }}
           style={
             accentColor
               ? { boxShadow: `inset 5px 0 0 ${accentColor}` }
