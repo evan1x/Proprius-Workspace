@@ -697,9 +697,11 @@ export function Sidebar({
                 className="min-w-0 flex-1 border border-line bg-paper px-1.5 py-0.5 text-xs font-medium text-ink outline-none"
               />
             ) : (
-              <span className="min-w-0 flex-1 truncate text-[11px] font-medium uppercase tracking-[0.1em] text-ink-muted">
-                {folder.name}
-                <span className="ml-1.5 text-ink-muted/70">({items.length})</span>
+              <span className="min-w-0 flex-1 truncate text-[11px] uppercase tracking-[0.1em]">
+                <span className="font-semibold text-ink">{folder.name}</span>
+                <span className="ml-1.5 font-medium text-ink-muted/70">
+                  ({items.length})
+                </span>
               </span>
             )}
           </button>
@@ -996,9 +998,9 @@ export function Sidebar({
                   aria-hidden="true"
                   className="h-3 w-3 shrink-0 rounded-full bg-ink-muted"
                 />
-                <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-ink-muted">
-                  Unfiled
-                  <span className="ml-1.5 text-ink-muted/70">
+                <span className="text-[11px] uppercase tracking-[0.1em]">
+                  <span className="font-semibold text-ink">Unfiled</span>
+                  <span className="ml-1.5 font-medium text-ink-muted/70">
                     ({unfiledConversations.length})
                   </span>
                 </span>
