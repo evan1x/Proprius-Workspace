@@ -117,6 +117,7 @@ interface SidebarProps {
   onDelete: (id: string) => void;
   onNewFolder: () => Promise<Folder | null>;
   onRenameFolder: (folderId: string, name: string) => void;
+  onRenameConversation: (conversationId: string, title: string) => void;
   onSetFolderColor: (folderId: string, color: string) => void;
   onDeleteFolder: (folderId: string) => void;
   onMoveConversation: (
@@ -265,6 +266,7 @@ export function Sidebar({
   onDelete,
   onNewFolder,
   onRenameFolder,
+  onRenameConversation,
   onSetFolderColor,
   onDeleteFolder,
   onMoveConversation,
@@ -280,6 +282,9 @@ export function Sidebar({
     Record<string, boolean>
   >({ __unfiled: true });
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
+  const [renamingConversationId, setRenamingConversationId] = useState<
+    string | null
+  >(null);
   const [renameValue, setRenameValue] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [filesSplit, setFilesSplit] = useState(FILES_SPLIT_DEFAULT);
@@ -348,10 +353,10 @@ export function Sidebar({
   }, [sidebarWidth]);
 
   useEffect(() => {
-    if (!renamingFolderId) return;
+    if (!renamingFolderId && !renamingConversationId) return;
     renameInputRef.current?.focus();
     renameInputRef.current?.select();
-  }, [renamingFolderId]);
+  }, [renamingFolderId, renamingConversationId]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -522,10 +527,33 @@ export function Sidebar({
     });
   }
 
+  function beginRename(kind: "folder" | "chat", id: string, name: string) {
+    setMenuOpen(null);
+    setRenameValue(name);
+    if (kind === "folder") {
+      setRenamingConversationId(null);
+      setRenamingFolderId(id);
+      return;
+    }
+    setRenamingFolderId(null);
+    setRenamingConversationId(id);
+  }
+
   function commitRename() {
-    if (!renamingFolderId) return;
     const nextName = renameValue.trim();
-    if (nextName) onRenameFolder(renamingFolderId, nextName);
+    if (renamingConversationId && nextName) {
+      onRenameConversation(renamingConversationId, nextName);
+    }
+    if (renamingFolderId && nextName) {
+      onRenameFolder(renamingFolderId, nextName);
+    }
+    setRenamingConversationId(null);
+    setRenamingFolderId(null);
+    setRenameValue("");
+  }
+
+  function cancelRename() {
+    setRenamingConversationId(null);
     setRenamingFolderId(null);
     setRenameValue("");
   }
@@ -692,6 +720,31 @@ export function Sidebar({
               : "bg-transparent text-ink hover:bg-hover"
           }`}
         >
+          {renamingConversationId === conversation.id ? (
+            <input
+              ref={renameInputRef}
+              aria-label="Rename chat"
+              value={renameValue}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
+              onDoubleClick={(event) => event.stopPropagation()}
+              onChange={(event) => setRenameValue(event.target.value)}
+              onBlur={commitRename}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  commitRename();
+                }
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  cancelRename();
+                }
+              }}
+              className={`min-w-0 flex-1 border border-line bg-paper px-2 py-2 text-sm font-medium text-ink outline-none ${
+                accentColor ? "ml-1" : "mx-1"
+              }`}
+            />
+          ) : (
           <button
             type="button"
             onClick={() => {
@@ -699,6 +752,12 @@ export function Sidebar({
               setMenuOpen(null);
               onSelect(conversation.id);
             }}
+            onDoubleClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              beginRename("chat", conversation.id, conversation.title);
+            }}
+            title="Double-click to rename"
             className={`min-w-0 flex-1 cursor-inherit py-2.5 text-left ${
               accentColor ? "pr-3 pl-4" : "px-3"
             }`}
@@ -710,6 +769,7 @@ export function Sidebar({
               {formatUpdatedAt(conversation.updatedAt)}
             </span>
           </button>
+          )}
 
           <div
             ref={isMenuOpen || isMoveOpen ? menuRef : undefined}
@@ -889,14 +949,22 @@ export function Sidebar({
                     commitRename();
                   }
                   if (event.key === "Escape") {
-                    setRenamingFolderId(null);
-                    setRenameValue("");
+                    event.preventDefault();
+                    cancelRename();
                   }
                 }}
                 className="min-w-0 flex-1 border border-line bg-paper px-1.5 py-0.5 text-xs font-medium text-ink outline-none"
               />
             ) : (
-              <span className="min-w-0 flex-1 truncate text-xs uppercase tracking-[0.08em]">
+              <span
+                className="min-w-0 flex-1 truncate text-xs uppercase tracking-[0.08em]"
+                title="Double-click to rename"
+                onDoubleClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  beginRename("folder", folder.id, folder.name);
+                }}
+              >
                 <span className="font-semibold text-ink">{folder.name}</span>
                 <span className="ml-1.5 font-medium text-ink-muted">
                   ({items.length})

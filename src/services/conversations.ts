@@ -185,6 +185,20 @@ export async function saveMessage(
 }
 
 /**
+ * Update a conversation's display title without changing its messages.
+ */
+export async function renameConversation(
+  conversationId: string,
+  title: string,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    "UPDATE conversations SET title = $1, updated_at = $2 WHERE id = $3",
+    [title, Date.now(), conversationId],
+  );
+}
+
+/**
  * Remove all messages for a conversation and reset its title.
  */
 export async function clearConversation(conversationId: string): Promise<void> {

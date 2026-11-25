@@ -28,6 +28,7 @@ import {
   createEmptyConversation,
   deleteConversation,
   listConversations,
+  renameConversation,
   saveMessage,
 } from "./services/conversations";
 import {
@@ -79,6 +80,17 @@ function createMessage(
   };
 }
 
+function titleForFirstSend(
+  currentTitle: string | undefined,
+  messageCount: number,
+  prompt: string,
+  attachments: ChatAttachment[],
+): string {
+  if (messageCount > 0) return currentTitle || "New chat";
+  if (currentTitle && currentTitle !== "New chat") return currentTitle;
+  return titleFromPrompt(prompt, attachments);
+}
+
 function titleFromPrompt(prompt: string, attachments: ChatAttachment[]): string {
   const trimmed = prompt.trim().replace(/\s+/g, " ");
   if (trimmed) {
@@ -103,6 +115,8 @@ function App() {
     id: string;
     nonce: number;
   } | null>(null);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -343,6 +357,26 @@ function App() {
     }
   }
 
+  async function handleRenameConversation(conversationId: string, title: string) {
+    const nextTitle = title.trim();
+    if (!nextTitle) return;
+    setError(null);
+    const previous = conversations;
+    setConversations((prev) =>
+      prev.map((conversation) =>
+        conversation.id === conversationId
+          ? { ...conversation, title: nextTitle, updatedAt: Date.now() }
+          : conversation,
+      ),
+    );
+    try {
+      await renameConversation(conversationId, nextTitle);
+    } catch (err) {
+      setConversations(previous);
+      setError(err instanceof Error ? err.message : "Failed to rename chat.");
+    }
+  }
+
   async function handleRenameFolder(folderId: string, name: string) {
     setError(null);
     const previous = folders;
@@ -523,18 +557,22 @@ function App() {
       (conversation) => conversation.id === targetId,
     );
     const folderId = existingNow?.folderId ?? created?.folderId ?? null;
-    const nextTitle =
-      (existingNow?.messages.length ?? 0) === 0
-        ? titleFromPrompt(trimmedPrompt, attachments)
-        : (existingNow?.title ?? created?.title ?? "New chat");
+    const nextTitle = titleForFirstSend(
+      existingNow?.title ?? created?.title,
+      existingNow?.messages.length ?? 0,
+      trimmedPrompt,
+      attachments,
+    );
 
     commitConversations((prev) => {
       const existing = prev.find((conversation) => conversation.id === targetId);
       const priorMessages = existing?.messages ?? [];
-      const title =
-        priorMessages.length === 0
-          ? titleFromPrompt(trimmedPrompt, attachments)
-          : (existing?.title ?? nextTitle);
+      const title = titleForFirstSend(
+        existing?.title ?? nextTitle,
+        priorMessages.length,
+        trimmedPrompt,
+        attachments,
+      );
 
       const updated: Conversation = {
         ...(existing ?? created!),
@@ -720,6 +758,9 @@ function App() {
         onRenameFolder={(folderId, name) => {
           void handleRenameFolder(folderId, name);
         }}
+        onRenameConversation={(conversationId, title) => {
+          void handleRenameConversation(conversationId, title);
+        }}
         onSetFolderColor={(folderId, color) => {
           void handleSetFolderColor(folderId, color);
         }}
@@ -770,13 +811,47 @@ function App() {
               <h1 className="truncate text-lg font-semibold tracking-tight text-ink sm:text-xl">
                 Proprius Workspace
               </h1>
-              <p className="mt-1 truncate text-xs text-ink-muted sm:text-sm">
-                {isLoading
-                  ? "Loading conversations…"
-                  : activeConversation
-                    ? activeConversation.title
-                    : "No conversation selected"}
-              </p>
+              {editingTitle && activeConversation ? (
+                <input
+                  autoFocus
+                  aria-label="Rename chat"
+                  value={titleDraft}
+                  onChange={(event) => setTitleDraft(event.target.value)}
+                  onBlur={() => {
+                    const next = titleDraft.trim();
+                    if (next && next !== activeConversation.title) {
+                      void handleRenameConversation(activeConversation.id, next);
+                    }
+                    setEditingTitle(false);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      event.currentTarget.blur();
+                    }
+                    if (event.key === "Escape") {
+                      setEditingTitle(false);
+                    }
+                  }}
+                  className="mt-1 w-full max-w-md border border-line bg-surface px-2 py-1 text-sm text-ink outline-none"
+                />
+              ) : (
+                <p
+                  className="mt-1 truncate text-xs text-ink-muted sm:text-sm"
+                  title="Double-click to rename"
+                  onDoubleClick={() => {
+                    if (!activeConversation) return;
+                    setTitleDraft(activeConversation.title);
+                    setEditingTitle(true);
+                  }}
+                >
+                  {isLoading
+                    ? "Loading conversations…"
+                    : activeConversation
+                      ? activeConversation.title
+                      : "No conversation selected"}
+                </p>
+              )}
             </div>
             <div className="flex shrink-0 items-stretch gap-1.5 sm:gap-2">
               <button
