@@ -6,6 +6,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import type { GeneratedFile } from "../services/generatedFiles";
 import type { Conversation, Folder } from "../types/chat";
 import {
   FOLDER_COLOR_OPTIONS,
@@ -21,6 +22,10 @@ const SIDEBAR_MIN_WIDTH = 200;
 const SIDEBAR_MAX_WIDTH = 480;
 const SIDEBAR_DEFAULT_WIDTH = 304;
 const SIDEBAR_COLLAPSED_WIDTH = 52;
+const FILES_SPLIT_STORAGE_KEY = "proprius.sidebarFilesSplit";
+const FILES_SPLIT_DEFAULT = 50;
+const FILES_SPLIT_MIN = 28;
+const FILES_SPLIT_MAX = 72;
 
 export function readSidebarCollapsed(): boolean {
   try {
@@ -71,6 +76,22 @@ function readExpandedFolders(): Record<string, boolean> {
   }
 }
 
+function clampFilesSplit(percent: number): number {
+  return Math.min(FILES_SPLIT_MAX, Math.max(FILES_SPLIT_MIN, Math.round(percent)));
+}
+
+function readStoredFilesSplit(): number {
+  try {
+    const stored = window.localStorage.getItem(FILES_SPLIT_STORAGE_KEY);
+    if (!stored) return FILES_SPLIT_DEFAULT;
+    const parsed = Number(stored);
+    if (!Number.isFinite(parsed)) return FILES_SPLIT_DEFAULT;
+    return clampFilesSplit(parsed);
+  } catch {
+    return FILES_SPLIT_DEFAULT;
+  }
+}
+
 function saveExpandedFolders(value: Record<string, boolean>): void {
   try {
     window.localStorage.setItem(
@@ -85,6 +106,7 @@ function saveExpandedFolders(value: Record<string, boolean>): void {
 interface SidebarProps {
   conversations: Conversation[];
   folders: Folder[];
+  generatedFiles: GeneratedFile[];
   activeId: string | null;
   settingsOpen?: boolean;
   collapsed?: boolean;
@@ -103,6 +125,7 @@ interface SidebarProps {
   ) => void;
   onOpenSettings?: () => void;
   onToggleCollapse?: () => void;
+  onDeleteGeneratedFile: (id: string) => void;
 }
 
 function formatUpdatedAt(timestamp: number): string {
@@ -121,9 +144,116 @@ type OpenMenu =
   | { type: "move"; id: string }
   | null;
 
+function fileLabel(name: string): string {
+  const base = name.split("/").pop() || name;
+  return base;
+}
+
+function GeneratedFilesPane({
+  files,
+  conversations,
+  selectedFileId,
+  onSelectFile,
+  onOpenConversation,
+  onDeleteFile,
+}: {
+  files: GeneratedFile[];
+  conversations: Conversation[];
+  selectedFileId: string | null;
+  onSelectFile: (id: string | null) => void;
+  onOpenConversation: (id: string) => void;
+  onDeleteFile: (id: string) => void;
+}) {
+  const selected = files.find((file) => file.id === selectedFileId) ?? null;
+  const titles = new Map(conversations.map((item) => [item.id, item.title]));
+
+  return (
+    <section
+      aria-label="Generated files"
+      className="flex min-h-[7.5rem] min-w-0 flex-1 flex-col overflow-hidden bg-panel"
+    >
+      <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-2.5">
+        <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
+          Files
+        </p>
+        <p className="text-[10px] text-ink-muted">{files.length}</p>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {files.length === 0 ? (
+          <p className="px-4 py-4 text-xs leading-relaxed text-ink-muted">
+            Named files from assistant replies show up here. Ask for a file
+            such as <span className="text-ink">app.py</span>.
+          </p>
+        ) : (
+          <ul className="flex flex-col py-1">
+            {files.map((file) => {
+              const isSelected = file.id === selectedFileId;
+              const chatTitle = titles.get(file.conversationId) ?? "Chat";
+              return (
+                <li key={file.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSelectFile(isSelected ? null : file.id);
+                      onOpenConversation(file.conversationId);
+                    }}
+                    className={`flex w-full min-w-0 flex-col gap-0.5 px-4 py-2 text-left transition hover:bg-hover ${
+                      isSelected ? "bg-surface" : ""
+                    }`}
+                  >
+                    <span className="truncate text-xs font-medium text-ink">
+                      {fileLabel(file.name)}
+                    </span>
+                    <span className="truncate text-[10px] text-ink-muted">
+                      {chatTitle}
+                      {file.language ? ` · ${file.language}` : ""}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+      {selected && (
+        <div className="border-t border-line px-3 py-2.5">
+          <p className="truncate text-[10px] font-medium text-ink">
+            {selected.name}
+          </p>
+          <pre className="mt-1.5 max-h-24 overflow-auto whitespace-pre-wrap break-words text-[10px] leading-relaxed text-ink-muted">
+            {selected.content}
+          </pre>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard.writeText(selected.content).catch(() => undefined);
+              }}
+              className="border border-line bg-surface px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-ink transition hover:bg-hover"
+            >
+              Copy
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onDeleteFile(selected.id);
+                onSelectFile(null);
+              }}
+              className="border border-line px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-danger transition hover:bg-danger/15"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function Sidebar({
   conversations,
   folders,
+  generatedFiles,
   activeId,
   settingsOpen = false,
   collapsed = false,
@@ -138,6 +268,7 @@ export function Sidebar({
   onMoveConversation,
   onOpenSettings,
   onToggleCollapse,
+  onDeleteGeneratedFile,
 }: SidebarProps) {
   const [menuOpen, setMenuOpen] = useState<OpenMenu>(null);
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
@@ -148,6 +279,9 @@ export function Sidebar({
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [filesSplit, setFilesSplit] = useState(FILES_SPLIT_DEFAULT);
+  const [isSplitting, setIsSplitting] = useState(false);
+  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
   const [dragGhost, setDragGhost] = useState<{
     x: number;
@@ -160,6 +294,11 @@ export function Sidebar({
     null,
   );
   const sidebarWidthRef = useRef(sidebarWidth);
+  const splitPaneRef = useRef<HTMLDivElement | null>(null);
+  const filesSplitRef = useRef(filesSplit);
+  const splitDragRef = useRef<{ startY: number; startSplit: number } | null>(
+    null,
+  );
   const conversationsRef = useRef(conversations);
   conversationsRef.current = conversations;
   const dropTargetKeyRef = useRef<string | null>(null);
@@ -195,7 +334,12 @@ export function Sidebar({
   useEffect(() => {
     setSidebarWidth(readStoredSidebarWidth());
     setExpandedFolders(readExpandedFolders());
+    setFilesSplit(readStoredFilesSplit());
   }, []);
+
+  useEffect(() => {
+    filesSplitRef.current = filesSplit;
+  }, [filesSplit]);
 
   useEffect(() => {
     sidebarWidthRef.current = sidebarWidth;
@@ -246,26 +390,51 @@ export function Sidebar({
   useEffect(() => {
     function handlePointerMove(event: PointerEvent) {
       const drag = resizeDragRef.current;
-      if (!drag) return;
-      const viewportCap = Math.floor(window.innerWidth * 0.42);
-      const nextWidth = Math.min(
-        viewportCap,
-        clampSidebarWidth(drag.startWidth + (event.clientX - drag.startX)),
-      );
-      setSidebarWidth(nextWidth);
+      if (drag) {
+        const viewportCap = Math.floor(window.innerWidth * 0.42);
+        const nextWidth = Math.min(
+          viewportCap,
+          clampSidebarWidth(drag.startWidth + (event.clientX - drag.startX)),
+        );
+        setSidebarWidth(nextWidth);
+      }
+
+      const split = splitDragRef.current;
+      const pane = splitPaneRef.current;
+      if (split && pane) {
+        const height = pane.getBoundingClientRect().height;
+        if (height <= 0) return;
+        const next = clampFilesSplit(
+          split.startSplit + ((event.clientY - split.startY) / height) * 100,
+        );
+        filesSplitRef.current = next;
+        setFilesSplit(next);
+      }
     }
 
     function endResize() {
-      if (!resizeDragRef.current) return;
+      const wasResizing = Boolean(resizeDragRef.current);
+      const wasSplitting = Boolean(splitDragRef.current);
+      if (!wasResizing && !wasSplitting) return;
       resizeDragRef.current = null;
+      splitDragRef.current = null;
       setIsResizing(false);
+      setIsSplitting(false);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       try {
-        window.localStorage.setItem(
-          SIDEBAR_WIDTH_STORAGE_KEY,
-          String(sidebarWidthRef.current),
-        );
+        if (wasResizing) {
+          window.localStorage.setItem(
+            SIDEBAR_WIDTH_STORAGE_KEY,
+            String(sidebarWidthRef.current),
+          );
+        }
+        if (wasSplitting) {
+          window.localStorage.setItem(
+            FILES_SPLIT_STORAGE_KEY,
+            String(filesSplitRef.current),
+          );
+        }
       } catch {
         // ignore storage failures
       }
@@ -304,6 +473,34 @@ export function Sidebar({
     setIsResizing(true);
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
+  }
+
+  function handleSplitPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    splitDragRef.current = {
+      startY: event.clientY,
+      startSplit: filesSplit,
+    };
+    setIsSplitting(true);
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+  }
+
+  function handleSplitKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault();
+    const delta = event.key === "ArrowDown" ? 4 : -4;
+    setFilesSplit((current) => {
+      const next = clampFilesSplit(current + delta);
+      filesSplitRef.current = next;
+      try {
+        window.localStorage.setItem(FILES_SPLIT_STORAGE_KEY, String(next));
+      } catch {
+        // ignore storage failures
+      }
+      return next;
+    });
   }
 
   function handleResizeKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
@@ -883,7 +1080,7 @@ export function Sidebar({
       key="expanded"
       style={{ width: sidebarWidth, maxWidth: "42vw" }}
       className={`side-panel side-panel-left relative flex h-full min-w-0 shrink-0 flex-col border-r border-line bg-panel ${
-        isResizing || draggingId ? "select-none" : ""
+        isResizing || isSplitting || draggingId ? "select-none" : ""
       }`}
     >
       {dragGhost && (
@@ -960,7 +1157,11 @@ export function Sidebar({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div ref={splitPaneRef} className="flex min-h-0 flex-1 flex-col">
+      <div
+        className="min-h-[7.5rem] overflow-y-auto"
+        style={{ flexBasis: `${filesSplit}%`, flexGrow: 0, flexShrink: 1 }}
+      >
         {conversations.length === 0 && folders.length === 0 ? (
           <p className="px-4 py-6 text-xs leading-relaxed text-ink-muted">
             No saved chats yet. Send a prompt to create one, or make a folder to
@@ -1023,6 +1224,31 @@ export function Sidebar({
             </div>
           </div>
         )}
+      </div>
+
+      <div
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize conversations and files"
+        aria-valuemin={FILES_SPLIT_MIN}
+        aria-valuemax={FILES_SPLIT_MAX}
+        aria-valuenow={filesSplit}
+        tabIndex={0}
+        onPointerDown={handleSplitPointerDown}
+        onKeyDown={handleSplitKeyDown}
+        className={`h-1.5 shrink-0 cursor-row-resize touch-none border-y border-line ${
+          isSplitting ? "bg-ink/50" : "bg-surface hover:bg-ink/25"
+        }`}
+      />
+
+      <GeneratedFilesPane
+        files={generatedFiles}
+        conversations={conversations}
+        selectedFileId={selectedFileId}
+        onSelectFile={setSelectedFileId}
+        onOpenConversation={onSelect}
+        onDeleteFile={onDeleteGeneratedFile}
+      />
       </div>
 
       <div className="border-t border-line px-4 py-3">

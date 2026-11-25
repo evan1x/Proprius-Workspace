@@ -303,6 +303,29 @@ pub fn run() {
         "#,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 5,
+            description: "add_generated_files",
+            sql: r#"
+            CREATE TABLE IF NOT EXISTS generated_files (
+              id TEXT PRIMARY KEY NOT NULL,
+              conversation_id TEXT NOT NULL,
+              message_id TEXT NOT NULL,
+              name TEXT NOT NULL,
+              language TEXT,
+              content TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_generated_files_created_at
+              ON generated_files(created_at DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_generated_files_conversation_id
+              ON generated_files(conversation_id);
+        "#,
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

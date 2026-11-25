@@ -38,6 +38,13 @@ import {
   setFolderColor,
 } from "./services/folders";
 import {
+  deleteGeneratedFile,
+  extractGeneratedFiles,
+  listGeneratedFiles,
+  replaceGeneratedFilesForMessage,
+  type GeneratedFile,
+} from "./services/generatedFiles";
+import {
   DEFAULT_MODEL,
   checkOllamaStatus,
   generateResponse,
@@ -89,6 +96,7 @@ function sortByUpdatedAt(conversations: Conversation[]): Conversation[] {
 function App() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
+  const [generatedFiles, setGeneratedFiles] = useState<GeneratedFile[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -224,6 +232,12 @@ function App() {
         if (cancelled) return;
 
         setFolders(storedFolders);
+        try {
+          const storedFiles = await listGeneratedFiles();
+          if (!cancelled) setGeneratedFiles(storedFiles);
+        } catch {
+          // The files table arrives with the next app launch.
+        }
 
         if (stored.length > 0) {
           setConversations(stored);
@@ -428,6 +442,9 @@ function App() {
     }
 
     setConversations(nextConversations);
+    setGeneratedFiles((current) =>
+      current.filter((file) => file.conversationId !== id),
+    );
     setActiveId(nextActiveId);
 
     try {
@@ -628,6 +645,15 @@ function App() {
       );
 
       await saveMessage(conversationId, finishedMessage, undefined, folderId);
+      const recorded = await replaceGeneratedFilesForMessage(
+        conversationId,
+        finishedMessage.id,
+        extractGeneratedFiles(reply),
+      );
+      setGeneratedFiles((current) => [
+        ...recorded,
+        ...current.filter((file) => file.messageId !== finishedMessage.id),
+      ]);
       setOllamaStatus({ ok: true, model: activeModel, modelAvailable: true });
     } catch (err) {
       commitConversations((prev) =>
@@ -667,6 +693,7 @@ function App() {
       <Sidebar
         conversations={conversations}
         folders={folders}
+        generatedFiles={generatedFiles}
         activeId={activeId}
         settingsOpen={settingsOpen}
         collapsed={sidebarCollapsed}
@@ -690,6 +717,18 @@ function App() {
           void handleMoveConversation(conversationId, folderId);
         }}
         onToggleCollapse={handleToggleSidebarCollapse}
+        onDeleteGeneratedFile={(fileId) => {
+          setGeneratedFiles((current) =>
+            current.filter((file) => file.id !== fileId),
+          );
+          void deleteGeneratedFile(fileId).catch((err) => {
+            setError(
+              err instanceof Error
+                ? err.message
+                : "Failed to delete generated file.",
+            );
+          });
+        }}
         onOpenSettings={() => {
           setSettingsOpen((current) => {
             const next = !current;

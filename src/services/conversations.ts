@@ -203,6 +203,9 @@ export async function clearConversation(conversationId: string): Promise<void> {
  */
 export async function deleteConversation(conversationId: string): Promise<void> {
   const db = await getDb();
+  await db.execute("DELETE FROM generated_files WHERE conversation_id = $1", [
+    conversationId,
+  ]);
   await db.execute("DELETE FROM messages WHERE conversation_id = $1", [
     conversationId,
   ]);
