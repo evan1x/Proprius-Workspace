@@ -191,30 +191,29 @@ function GeneratedFilesPane({
       className="flex min-h-[7.5rem] min-w-0 flex-1 flex-col overflow-hidden bg-panel"
     >
       <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-2.5">
-        <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
+        <p className="text-xs font-medium uppercase tracking-[0.12em] text-ink">
           Files
         </p>
-        <p className="text-[10px] text-ink-muted">{files.length}</p>
+        <p className="text-xs text-ink">{files.length}</p>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {groups.length === 0 ? (
-          <p className="px-4 py-4 text-xs leading-relaxed text-ink-muted">
-            Every code block from assistant replies is collected here, grouped
-            by chat.
+          <p className="px-4 py-4 text-sm leading-relaxed text-ink">
+            Code from replies shows up here, grouped by chat.
           </p>
         ) : (
           <div className="flex flex-col gap-2.5 py-2.5">
             {groups.map((group) => (
               <section
                 key={group.conversationId}
-                className="mx-2 overflow-hidden rounded-sm border border-line/70 border-l-[6px] border-l-ink-muted bg-surface/30"
+                className="mx-2 overflow-hidden rounded-xl border border-line/70 border-l-[6px] border-l-ink-muted bg-surface/30"
               >
                 <button
                   type="button"
                   onClick={() => onOpenConversation(group.conversationId)}
                   className="flex w-full items-center justify-between gap-2 border-b border-line/50 px-3 py-2 text-left transition hover:bg-hover"
                 >
-                  <span className="min-w-0 truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-ink">
+                  <span className="min-w-0 truncate text-xs font-semibold uppercase tracking-[0.08em] text-ink">
                     {group.title}
                   </span>
                   <span className="shrink-0 text-[10px] text-ink-muted">
@@ -236,7 +235,7 @@ function GeneratedFilesPane({
                           <span className="truncate text-xs font-medium text-ink">
                             {fileLabel(file.name)}
                           </span>
-                          <span className="truncate text-[10px] text-ink-muted">
+                          <span className="truncate text-xs text-ink-muted">
                             {file.language || "code"} · {formatUpdatedAt(file.createdAt)}
                           </span>
                         </button>
@@ -707,7 +706,7 @@ export function Sidebar({
             <span className="block w-full truncate text-sm font-medium">
               {conversation.title}
             </span>
-            <span className="mt-1 block text-[10px] tracking-wide text-ink-muted">
+            <span className="mt-1 block text-xs text-ink-muted">
               {formatUpdatedAt(conversation.updatedAt)}
             </span>
           </button>
@@ -737,7 +736,7 @@ export function Sidebar({
             {isMenuOpen && (
               <div
                 role="menu"
-                className="absolute top-9 right-0 z-[60] min-w-[8.5rem] border border-line bg-surface shadow-lg"
+                className="absolute top-9 right-0 z-[60] min-w-[8.5rem] border border-line bg-surface shadow-lg rounded-xl overflow-hidden"
                 style={{ backgroundColor: "var(--color-surface)" }}
               >
                 <button
@@ -769,7 +768,7 @@ export function Sidebar({
             {isMoveOpen && (
               <div
                 role="menu"
-                className="absolute top-9 right-0 z-[60] max-h-56 min-w-[9rem] overflow-y-auto border border-line bg-surface shadow-lg"
+                className="absolute top-9 right-0 z-[60] max-h-56 min-w-[9rem] overflow-y-auto rounded-xl border border-line bg-surface shadow-lg"
                 style={{ backgroundColor: "var(--color-surface)" }}
               >
                 <button
@@ -847,7 +846,7 @@ export function Sidebar({
             ? undefined
             : `${folderColor.swatch}22`,
         }}
-        className={`relative mx-2 rounded-sm border border-line/70 transition ${
+        className={`relative mx-2 rounded-xl border border-line/70 transition ${
           isDropTarget ? "bg-hover ring-1 ring-inset ring-ink/40" : ""
         } ${elevate ? "z-50" : "z-0"}`}
         onContextMenu={(event) => {
@@ -897,9 +896,9 @@ export function Sidebar({
                 className="min-w-0 flex-1 border border-line bg-paper px-1.5 py-0.5 text-xs font-medium text-ink outline-none"
               />
             ) : (
-              <span className="min-w-0 flex-1 truncate text-[11px] uppercase tracking-[0.1em]">
+              <span className="min-w-0 flex-1 truncate text-xs uppercase tracking-[0.08em]">
                 <span className="font-semibold text-ink">{folder.name}</span>
-                <span className="ml-1.5 font-medium text-ink-muted/70">
+                <span className="ml-1.5 font-medium text-ink-muted">
                   ({items.length})
                 </span>
               </span>
@@ -940,7 +939,7 @@ export function Sidebar({
             {isMenuOpen && (
               <div
                 role="menu"
-                className="absolute top-8 right-0 z-[60] min-w-[10rem] border border-line bg-surface shadow-lg"
+                className="absolute top-8 right-0 z-[60] min-w-[10rem] border border-line bg-surface shadow-lg rounded-xl overflow-hidden"
                 style={{ backgroundColor: "var(--color-surface)" }}
               >
                 <button
@@ -1010,7 +1009,7 @@ export function Sidebar({
         {expanded && (
           <ul className="flex flex-col gap-0.5 px-1 py-1.5">
             {items.length === 0 ? (
-              <li className="px-4 py-2.5 text-[10px] text-ink-muted">
+              <li className="px-4 py-2.5 text-xs text-ink">
                 Drop chats here to organize them.
               </li>
             ) : (
@@ -1065,7 +1064,7 @@ export function Sidebar({
             aria-expanded={settingsOpen}
             aria-controls="settings-side-panel"
             onClick={onOpenSettings}
-            className={`flex h-8 w-8 items-center justify-center border border-line text-[10px] font-medium uppercase tracking-wide transition ${
+            className={`flex h-9 w-9 items-center justify-center border border-line text-xs font-medium uppercase tracking-wide transition ${
               settingsOpen
                 ? "bg-ink text-panel"
                 : "bg-surface text-ink hover:bg-hover"
@@ -1089,7 +1088,7 @@ export function Sidebar({
       {dragGhost && (
         <div
           aria-hidden="true"
-          className="pointer-events-none fixed z-[100] max-w-[12rem] truncate border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink shadow-sm"
+          className="pointer-events-none fixed z-[100] max-w-[12rem] truncate rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink shadow-sm"
           style={{
             left: dragGhost.x + 12,
             top: dragGhost.y + 12,
@@ -1116,7 +1115,7 @@ export function Sidebar({
 
       <div className="border-b border-line px-4 py-3.5">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
+          <p className="text-xs font-medium uppercase tracking-[0.12em] text-ink">
             Conversations
           </p>
           <button
@@ -1176,7 +1175,7 @@ export function Sidebar({
 
             <div
               data-drop-key={UNFILED_DROP_KEY}
-              className={`relative mx-2 rounded-sm border border-line/70 transition ${
+              className={`relative mx-2 rounded-xl border border-line/70 transition ${
                 dropTargetKey === UNFILED_DROP_KEY
                   ? "bg-hover ring-1 ring-inset ring-ink/40"
                   : "bg-surface/30"
@@ -1204,9 +1203,9 @@ export function Sidebar({
                   aria-hidden="true"
                   className="h-3 w-3 shrink-0 rounded-full bg-ink-muted"
                 />
-                <span className="text-[11px] uppercase tracking-[0.1em]">
+                <span className="text-xs uppercase tracking-[0.08em]">
                   <span className="font-semibold text-ink">Unfiled</span>
-                  <span className="ml-1.5 font-medium text-ink-muted/70">
+                  <span className="ml-1.5 font-medium text-ink-muted">
                     ({unfiledConversations.length})
                   </span>
                 </span>
@@ -1214,7 +1213,7 @@ export function Sidebar({
               {isFolderExpanded(UNFILED_DROP_KEY) && (
                 <ul className="flex flex-col gap-0.5 px-1 py-1.5">
                   {unfiledConversations.length === 0 ? (
-                    <li className="px-4 py-2.5 text-[10px] text-ink-muted">
+                    <li className="px-4 py-2.5 text-xs text-ink">
                       Drop chats here, or leave them unfiled.
                     </li>
                   ) : (
@@ -1260,7 +1259,7 @@ export function Sidebar({
             aria-expanded={settingsOpen}
             aria-controls="settings-side-panel"
             onClick={onOpenSettings}
-            className={`border border-line px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-wide transition ${
+            className={`border border-line px-3.5 py-2 text-xs font-medium uppercase tracking-wide transition ${
               settingsOpen
                 ? "bg-ink text-panel"
                 : "bg-surface text-ink hover:bg-hover"
@@ -1268,7 +1267,7 @@ export function Sidebar({
           >
             Settings
           </button>
-          <p className="text-[10px] tracking-wide text-ink-muted">
+          <p className="text-xs text-ink-muted">
             Runtime · Ollama
           </p>
         </div>

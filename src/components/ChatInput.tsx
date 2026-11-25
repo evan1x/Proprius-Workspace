@@ -164,7 +164,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             </div>
           )}
 
-          <div className="flex w-full items-stretch overflow-hidden rounded-2xl border border-line bg-surface">
+          <div className="flex w-full items-stretch overflow-hidden rounded-2xl border border-line bg-surface shadow-[0_10px_24px_rgb(0_0_0/0.18)]">
             <label className="sr-only" htmlFor="prompt-input">
               Prompt
             </label>

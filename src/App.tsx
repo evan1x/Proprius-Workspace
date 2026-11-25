@@ -324,6 +324,8 @@ function App() {
       ...prev.filter((item) => item.messages.length > 0),
     ]);
     setActiveId(conversation.id);
+    setOpenFileId(null);
+    setFocusMessage(null);
     setError(null);
   }
 
@@ -427,6 +429,7 @@ function App() {
 
   function handleSelect(id: string) {
     setActiveId(id);
+    setOpenFileId(null);
     setFocusMessage(null);
     setError(null);
   }
@@ -747,7 +750,7 @@ function App() {
       />
 
       <div
-        className="relative flex min-h-0 min-w-0 flex-1 flex-col"
+        className="relative flex min-h-0 min-w-0 flex-1 flex-col workspace-main"
         onDragEnter={handleChatDragEnter}
         onDragLeave={handleChatDragLeave}
         onDragOver={handleChatDragOver}
@@ -761,7 +764,7 @@ function App() {
           </div>
         )}
 
-        <header className="border-b border-line bg-paper px-4 py-4 sm:px-6">
+        <header className="app-header border-b border-line px-4 py-4 sm:px-6">
           <div className="flex items-center justify-between gap-3 sm:gap-4">
             <div className="min-w-0">
               <h1 className="truncate text-lg font-semibold tracking-tight text-ink sm:text-xl">
@@ -916,7 +919,7 @@ function App() {
 
         {error && (
           <div className="px-3 pb-2 sm:px-5 md:px-8">
-            <p className="mx-auto max-w-6xl border border-line bg-surface px-3 py-2 text-sm text-ink">
+            <p className="mx-auto max-w-6xl rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink">
               {error}
             </p>
           </div>

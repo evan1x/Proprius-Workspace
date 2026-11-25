@@ -103,8 +103,8 @@ export function FileViewer({
         </div>
       </div>
 
-      <div className="markdown-body file-view min-h-0 flex-1 overflow-auto">
-        <div className="code-block m-0 flex min-h-full min-w-full rounded-none border-0">
+      <div className="markdown-body file-view min-h-0 flex-1 overflow-auto p-4 sm:p-6">
+        <div className="code-block m-0 flex min-h-full min-w-full overflow-hidden rounded-2xl border border-white/10">
           <div
             aria-hidden="true"
             className="file-view-gutter shrink-0 select-none border-r border-white/10 px-3 py-4 text-right"

@@ -38,6 +38,13 @@
     font: inherit;
   }
 
+  button.border,
+  input.border,
+  textarea.border,
+  select.border {
+    border-radius: 0.75rem;
+  }
+
   ::selection {
     background: #ffffff;
     color: #181818;
@@ -72,11 +79,19 @@
 
 @layer components {
   .chat-bubble {
-    box-shadow: 0 4px 10px rgb(0 0 0 / 0.32);
+    box-shadow: 0 8px 18px rgb(0 0 0 / 0.22);
   }
 
   :root[data-theme="light"] .chat-bubble {
-    box-shadow: 0 3px 8px rgb(0 0 0 / 0.12);
+    box-shadow: 0 6px 16px rgb(0 0 0 / 0.08);
+  }
+
+  .workspace-main {
+    background: var(--color-paper);
+  }
+
+  .app-header {
+    background: var(--color-paper);
   }
 
   .typing-dots {
