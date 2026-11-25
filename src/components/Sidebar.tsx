@@ -467,6 +467,7 @@ export function Sidebar({
     return (
       <li
         key={conversation.id}
+        data-chat-row=""
         className={`relative px-1.5 py-1 ${
           isMenuOpen || isMoveOpen ? "z-40" : ""
         }`}
@@ -649,6 +650,13 @@ export function Sidebar({
         className={`relative mx-2 rounded-sm border border-line/70 transition ${
           isDropTarget ? "bg-hover ring-1 ring-inset ring-ink/40" : ""
         } ${elevate ? "z-50" : "z-0"}`}
+        onContextMenu={(event) => {
+          const target = event.target as HTMLElement;
+          if (target.closest("[data-chat-row]")) return;
+          event.preventDefault();
+          event.stopPropagation();
+          setMenuOpen({ type: "folder", id: folder.id });
+        }}
       >
         <div
           className="flex items-center gap-1 border-b border-line/50 px-2 py-1.5"
