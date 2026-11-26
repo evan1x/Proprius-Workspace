@@ -323,6 +323,19 @@
 
   .markdown-body .code-block > div:first-child {
     background: #1a1a1a;
+    color: #f4f4f4;
+    border-color: #3a3a3a;
+  }
+
+  .markdown-body .code-block > div:first-child span,
+  .markdown-body .code-block > div:first-child button {
+    color: #f4f4f4;
+    border-color: #6a6a6a;
+  }
+
+  .markdown-body .code-block > div:first-child button:hover {
+    background: #2c2c2c;
+    color: #ffffff;
   }
 
   .markdown-body pre code,

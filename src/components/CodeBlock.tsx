@@ -22,8 +22,8 @@ export function CodeBlock({ language, children }: CodeBlockProps) {
 
   return (
     <div className="code-block my-3 overflow-hidden rounded-xl border border-line">
-      <div className="flex items-center justify-between gap-3 border-b border-line px-3 py-1.5">
-        <span className="truncate text-[10px] font-medium uppercase tracking-[0.12em] text-ink">
+      <div className="flex items-center justify-between gap-3 border-b border-[#3a3a3a] px-3 py-1.5">
+        <span className="truncate text-[10px] font-medium uppercase tracking-[0.12em] text-[#f4f4f4]">
           {language || "code"}
         </span>
         <button
@@ -31,7 +31,7 @@ export function CodeBlock({ language, children }: CodeBlockProps) {
           onClick={() => {
             void handleCopy();
           }}
-          className="shrink-0 border border-line px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ink transition hover:bg-hover"
+          className="shrink-0 border border-[#6a6a6a] bg-transparent px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#f4f4f4] transition hover:border-[#f4f4f4] hover:bg-[#2c2c2c]"
         >
           {copied ? "Copied" : "Copy"}
         </button>
