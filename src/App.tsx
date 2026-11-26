@@ -699,7 +699,11 @@ function App() {
       const recorded = await replaceGeneratedFilesForMessage(
         conversationId,
         finishedMessage.id,
-        extractGeneratedFiles(reply),
+        extractGeneratedFiles(
+          reply,
+          conversationsRef.current.find((entry) => entry.id === conversationId)
+            ?.title,
+        ),
       );
       setGeneratedFiles((current) => [
         ...recorded,

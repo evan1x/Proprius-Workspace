@@ -139,17 +139,77 @@ function filenameFromFenceInfo(info: string): {
   };
 }
 
-/** Pull every fenced code block. Named fences keep their filename; others get a language-based name. */
-export function extractGeneratedFiles(content: string): ExtractedGeneratedFile[] {
+function kebab(value: string): string {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .replace(/[_\s]+/g, "-")
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 48)
+    .replace(/-$/g, "");
+}
+
+function slugFromTitle(title: string | undefined): string | null {
+  if (!title) return null;
+  const slug = kebab(title);
+  if (!slug || slug === "new-chat") return null;
+  return slug;
+}
+
+const SKIP_SYMBOLS = new Set([
+  "main",
+  "init",
+  "setup",
+  "index",
+  "test",
+  "app",
+  "program",
+]);
+
+function usableSymbol(name: string | undefined): string | null {
+  if (!name || name.startsWith("_")) return null;
+  if (SKIP_SYMBOLS.has(name.toLowerCase())) return null;
+  const stem = kebab(name);
+  return stem.length >= 2 ? stem : null;
+}
+
+/** A function or type name from the code, when one is obvious. */
+function symbolFromCode(body: string): string | null {
+  const patterns = [
+    /^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_]\w*)/m,
+    /^\s*(?:export\s+)?class\s+([A-Za-z_]\w*)/m,
+    /^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+([A-Za-z_]\w*)/m,
+    /^\s*def\s+([A-Za-z_]\w*)/m,
+    /^\s*func\s+(?:\(\s*[A-Za-z_]\w*\s*\)\s+)?([A-Za-z_]\w*)/m,
+    /^\s*(?:public|private|protected)?\s*(?:static\s+)?(?:final\s+)?class\s+([A-Za-z_]\w*)/m,
+    /^\s*(?:struct|interface|enum|type)\s+([A-Za-z_]\w*)/m,
+    /^\s*(?:[A-Za-z_][\w\s*]*?)\s+([A-Za-z_]\w*)\s*\([^;]*\)\s*\{/m,
+  ];
+  for (const pattern of patterns) {
+    const stem = usableSymbol(body.match(pattern)?.[1]);
+    if (stem) return stem;
+  }
+  return null;
+}
+
+function isGenericGeneratedName(name: string): boolean {
+  return /^[a-z0-9+]{1,16}-\d+\.[a-z0-9]{1,8}$/i.test(name);
+}
+
+/** Pull every fenced code block. Named fences keep their filename. */
+export function extractGeneratedFiles(
+  content: string,
+  chatTitle?: string,
+): ExtractedGeneratedFile[] {
   const files: ExtractedGeneratedFile[] = [];
   const usedNames = new Set<string>();
   const fence = /(?:```|~~~)([^\n]*)\n([\s\S]*?)\n(?:```|~~~)[ \t]*(?:\n|$)/g;
-  let index = 0;
 
   for (const match of content.matchAll(fence)) {
     const body = (match[2] ?? "").replace(/\n$/, "");
     if (!body.trim()) continue;
-    index += 1;
 
     const info = (match[1] ?? "").trim();
     const named = filenameFromFenceInfo(info);
@@ -163,9 +223,12 @@ export function extractGeneratedFiles(content: string): ExtractedGeneratedFile[]
     }
 
     const language = info.split(/\s+/).find((token) => token && !token.includes("=")) ?? null;
-    const stem = (language ?? "code").toLowerCase().replace(/[^a-z0-9+-]/g, "") || "code";
+    const stem =
+      symbolFromCode(body) ??
+      slugFromTitle(chatTitle) ??
+      (language ? kebab(language) : "snippet");
     files.push({
-      name: uniqueName(`${stem}-${index}.${extensionFor(language)}`, usedNames),
+      name: uniqueName(`${stem}.${extensionFor(language)}`, usedNames),
       language,
       content: body,
     });
@@ -235,16 +298,17 @@ export async function deleteGeneratedFile(id: string): Promise<void> {
   await db.execute("DELETE FROM generated_files WHERE id = $1", [id]);
 }
 
-async function existingFileKeys(messageId: string): Promise<Set<string>> {
+async function existingFileRows(
+  messageId: string,
+): Promise<Array<{ id: string; name: string; content: string }>> {
   const db = await getDb();
-  const rows = await db.select<Array<{ name: string; content: string }>>(
-    `SELECT name, content FROM generated_files WHERE message_id = $1`,
+  return db.select<Array<{ id: string; name: string; content: string }>>(
+    `SELECT id, name, content FROM generated_files WHERE message_id = $1`,
     [messageId],
   );
-  return new Set(rows.map((row) => `${row.name}\0${row.content}`));
 }
 
-/** Insert code blocks that are not already stored for this message. */
+/** Insert code blocks that are not already stored, and replace generic names. */
 export async function ensureGeneratedFilesForMessage(
   conversationId: string,
   messageId: string,
@@ -252,13 +316,32 @@ export async function ensureGeneratedFilesForMessage(
 ): Promise<void> {
   if (files.length === 0) return;
   const db = await getDb();
-  const existing = await existingFileKeys(messageId);
+  const rows = await existingFileRows(messageId);
   const createdAt = Date.now();
+  const usedNames = new Set(rows.map((row) => row.name));
 
   for (const file of files) {
-    const key = `${file.name}\0${file.content}`;
-    if (existing.has(key)) continue;
-    existing.add(key);
+    const sameContent = rows.find((row) => row.content === file.content);
+    if (sameContent) {
+      if (
+        isGenericGeneratedName(sameContent.name) &&
+        sameContent.name !== file.name
+      ) {
+        const nextName = uniqueName(file.name, new Set(
+          [...usedNames].filter((name) => name !== sameContent.name),
+        ));
+        await db.execute("UPDATE generated_files SET name = $1 WHERE id = $2", [
+          nextName,
+          sameContent.id,
+        ]);
+        usedNames.delete(sameContent.name);
+        usedNames.add(nextName);
+        sameContent.name = nextName;
+      }
+      continue;
+    }
+
+    const name = uniqueName(file.name, usedNames);
     await db.execute(
       `INSERT INTO generated_files (
          id, conversation_id, message_id, name, language, content, created_at
@@ -267,7 +350,7 @@ export async function ensureGeneratedFilesForMessage(
         crypto.randomUUID(),
         conversationId,
         messageId,
-        file.name,
+        name,
         file.language,
         file.content,
         createdAt,
@@ -280,6 +363,7 @@ export async function ensureGeneratedFilesForMessage(
 export async function syncGeneratedFilesFromConversations(
   conversations: Array<{
     id: string;
+    title?: string;
     messages: Array<{ id: string; role: string; content: string }>;
   }>,
 ): Promise<GeneratedFile[]> {
@@ -289,7 +373,7 @@ export async function syncGeneratedFilesFromConversations(
       if (!message.content.includes("```") && !message.content.includes("~~~")) {
         continue;
       }
-      const extracted = extractGeneratedFiles(message.content);
+      const extracted = extractGeneratedFiles(message.content, conversation.title);
       if (extracted.length === 0) continue;
       await ensureGeneratedFilesForMessage(
         conversation.id,
