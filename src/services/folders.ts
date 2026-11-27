@@ -1,4 +1,5 @@
 import Database from "@tauri-apps/plugin-sql";
+import { currentUserId } from "./auth";
 import type { Folder } from "../types/chat";
 import {
   DEFAULT_FOLDER_COLOR,
@@ -54,7 +55,9 @@ export async function listFolders(): Promise<Folder[]> {
   const rows = await db.select<FolderRow[]>(
     `SELECT id, name, created_at, sort_order, color
      FROM folders
+     WHERE user_id = $1
      ORDER BY sort_order ASC, created_at ASC`,
+    [currentUserId()],
   );
   return rows.map(mapFolder);
 }
@@ -66,14 +69,15 @@ export async function createFolder(
   const folder = createEmptyFolder(name, nextFolderColor(existingCount));
   const db = await getDb();
   await db.execute(
-    `INSERT INTO folders (id, name, created_at, sort_order, color)
-     VALUES ($1, $2, $3, $4, $5)`,
+    `INSERT INTO folders (id, name, created_at, sort_order, color, user_id)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
     [
       folder.id,
       folder.name,
       folder.createdAt,
       folder.sortOrder,
       folder.color,
+      currentUserId(),
     ],
   );
   return folder;
@@ -85,9 +89,10 @@ export async function renameFolder(
 ): Promise<void> {
   const trimmed = name.trim() || "New folder";
   const db = await getDb();
-  await db.execute("UPDATE folders SET name = $1 WHERE id = $2", [
+  await db.execute("UPDATE folders SET name = $1 WHERE id = $2 AND user_id = $3", [
     trimmed,
     folderId,
+    currentUserId(),
   ]);
 }
 
@@ -96,10 +101,10 @@ export async function setFolderColor(
   color: string,
 ): Promise<void> {
   const db = await getDb();
-  await db.execute("UPDATE folders SET color = $1 WHERE id = $2", [
-    normalizeFolderColor(color),
-    folderId,
-  ]);
+  await db.execute(
+    "UPDATE folders SET color = $1 WHERE id = $2 AND user_id = $3",
+    [normalizeFolderColor(color), folderId, currentUserId()],
+  );
 }
 
 /**
@@ -107,11 +112,15 @@ export async function setFolderColor(
  */
 export async function deleteFolder(folderId: string): Promise<void> {
   const db = await getDb();
+  const userId = currentUserId();
   await db.execute(
-    "UPDATE conversations SET folder_id = NULL WHERE folder_id = $1",
-    [folderId],
+    "UPDATE conversations SET folder_id = NULL WHERE folder_id = $1 AND user_id = $2",
+    [folderId, userId],
   );
-  await db.execute("DELETE FROM folders WHERE id = $1", [folderId]);
+  await db.execute("DELETE FROM folders WHERE id = $1 AND user_id = $2", [
+    folderId,
+    userId,
+  ]);
 }
 
 export async function moveConversationToFolder(
@@ -120,7 +129,7 @@ export async function moveConversationToFolder(
 ): Promise<void> {
   const db = await getDb();
   await db.execute(
-    "UPDATE conversations SET folder_id = $1 WHERE id = $2",
-    [folderId, conversationId],
+    "UPDATE conversations SET folder_id = $1 WHERE id = $2 AND user_id = $3",
+    [folderId, conversationId, currentUserId()],
   );
 }

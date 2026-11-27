@@ -326,6 +326,28 @@ pub fn run() {
         "#,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 6,
+            description: "add_users_and_scope_data",
+            sql: r#"
+            CREATE TABLE IF NOT EXISTS users (
+              id TEXT PRIMARY KEY NOT NULL,
+              username TEXT NOT NULL COLLATE NOCASE UNIQUE,
+              password_hash TEXT NOT NULL,
+              created_at INTEGER NOT NULL
+            );
+
+            ALTER TABLE conversations ADD COLUMN user_id TEXT;
+            ALTER TABLE folders ADD COLUMN user_id TEXT;
+
+            CREATE INDEX IF NOT EXISTS idx_conversations_user_id
+              ON conversations(user_id);
+
+            CREATE INDEX IF NOT EXISTS idx_folders_user_id
+              ON folders(user_id);
+        "#,
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

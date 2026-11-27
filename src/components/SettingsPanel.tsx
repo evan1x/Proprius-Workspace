@@ -276,8 +276,10 @@ export function SettingsPanel({
       id="settings-side-panel"
       aria-label="Settings"
       style={{ width: effectiveWidth, maxWidth: overlay ? "100%" : undefined }}
-      className={`side-panel relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-l border-line ${
-        overlay ? "absolute inset-y-0 right-0 z-30" : "shrink-0"
+      className={`side-panel flex h-full min-h-0 flex-col overflow-hidden border-l border-line ${
+        overlay
+          ? "absolute inset-y-0 right-0 z-30"
+          : "relative min-w-[16rem] shrink"
       } ${isResizing ? "select-none" : ""}`}
     >
       <div

@@ -1,4 +1,5 @@
 import Database from "@tauri-apps/plugin-sql";
+import { currentUserId } from "./auth";
 import type {
   ChatAttachment,
   ChatMessage,
@@ -72,10 +73,13 @@ function mapMessage(row: MessageRow): ChatMessage {
  */
 export async function listConversations(): Promise<Conversation[]> {
   const db = await getDb();
+  const userId = currentUserId();
   const conversationRows = await db.select<ConversationRow[]>(
     `SELECT id, title, updated_at, folder_id
      FROM conversations
+     WHERE user_id = $1
      ORDER BY updated_at DESC`,
+    [userId],
   );
 
   if (conversationRows.length === 0) {
@@ -83,9 +87,13 @@ export async function listConversations(): Promise<Conversation[]> {
   }
 
   const messageRows = await db.select<MessageRow[]>(
-    `SELECT id, conversation_id, role, content, created_at, attachments_json
+    `SELECT messages.id, messages.conversation_id, messages.role, messages.content,
+            messages.created_at, messages.attachments_json
      FROM messages
-     ORDER BY created_at ASC`,
+     INNER JOIN conversations ON conversations.id = messages.conversation_id
+     WHERE conversations.user_id = $1
+     ORDER BY messages.created_at ASC`,
+    [userId],
   );
 
   const messagesByConversation = new Map<string, ChatMessage[]>();
@@ -111,18 +119,21 @@ export async function upsertConversation(
   conversation: Pick<Conversation, "id" | "title" | "updatedAt" | "folderId">,
 ): Promise<void> {
   const db = await getDb();
+  const userId = currentUserId();
   await db.execute(
-    `INSERT INTO conversations (id, title, updated_at, folder_id)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO conversations (id, title, updated_at, folder_id, user_id)
+     VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT(id) DO UPDATE SET
        title = excluded.title,
        updated_at = excluded.updated_at,
-       folder_id = COALESCE(excluded.folder_id, conversations.folder_id)`,
+       folder_id = COALESCE(excluded.folder_id, conversations.folder_id)
+     WHERE conversations.user_id = excluded.user_id`,
     [
       conversation.id,
       conversation.title,
       conversation.updatedAt,
       conversation.folderId ?? null,
+      userId,
     ],
   );
 }
@@ -146,21 +157,24 @@ export async function saveMessage(
       : null;
   const nextTitle = title ?? "New chat";
 
+  const userId = currentUserId();
   await db.execute(
-    `INSERT INTO conversations (id, title, updated_at, folder_id)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO conversations (id, title, updated_at, folder_id, user_id)
+     VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT(id) DO UPDATE SET
        title = CASE
-         WHEN $5 = 1 THEN excluded.title
+         WHEN $6 = 1 THEN excluded.title
          ELSE conversations.title
        END,
        updated_at = excluded.updated_at,
-       folder_id = COALESCE(conversations.folder_id, excluded.folder_id)`,
+       folder_id = COALESCE(conversations.folder_id, excluded.folder_id)
+     WHERE conversations.user_id = excluded.user_id`,
     [
       conversationId,
       nextTitle,
       updatedAt,
       folderId ?? null,
+      userId,
       title !== undefined ? 1 : 0,
     ],
   );
@@ -193,8 +207,8 @@ export async function renameConversation(
 ): Promise<void> {
   const db = await getDb();
   await db.execute(
-    "UPDATE conversations SET title = $1, updated_at = $2 WHERE id = $3",
-    [title, Date.now(), conversationId],
+    "UPDATE conversations SET title = $1, updated_at = $2 WHERE id = $3 AND user_id = $4",
+    [title, Date.now(), conversationId, currentUserId()],
   );
 }
 
@@ -207,8 +221,8 @@ export async function clearConversation(conversationId: string): Promise<void> {
     conversationId,
   ]);
   await db.execute(
-    "UPDATE conversations SET title = $1, updated_at = $2 WHERE id = $3",
-    ["New chat", Date.now(), conversationId],
+    "UPDATE conversations SET title = $1, updated_at = $2 WHERE id = $3 AND user_id = $4",
+    ["New chat", Date.now(), conversationId, currentUserId()],
   );
 }
 
@@ -217,11 +231,21 @@ export async function clearConversation(conversationId: string): Promise<void> {
  */
 export async function deleteConversation(conversationId: string): Promise<void> {
   const db = await getDb();
+  const userId = currentUserId();
+  const owned = await db.select<Array<{ id: string }>>(
+    "SELECT id FROM conversations WHERE id = $1 AND user_id = $2",
+    [conversationId, userId],
+  );
+  if (owned.length === 0) return;
+
   await db.execute("DELETE FROM generated_files WHERE conversation_id = $1", [
     conversationId,
   ]);
   await db.execute("DELETE FROM messages WHERE conversation_id = $1", [
     conversationId,
   ]);
-  await db.execute("DELETE FROM conversations WHERE id = $1", [conversationId]);
+  await db.execute("DELETE FROM conversations WHERE id = $1 AND user_id = $2", [
+    conversationId,
+    userId,
+  ]);
 }

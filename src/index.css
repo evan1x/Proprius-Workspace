@@ -94,6 +94,22 @@
     background: var(--color-paper);
   }
 
+  .login-screen {
+    background-color: #161616;
+    background-image:
+      radial-gradient(ellipse 140% 110% at 0% 0%, rgb(255 255 255 / 0.08), transparent 72%),
+      radial-gradient(ellipse 120% 100% at 100% 100%, rgb(255 255 255 / 0.04), transparent 70%),
+      linear-gradient(165deg, #222222 0%, #1a1a1a 55%, #121212 100%);
+  }
+
+  :root[data-theme="light"] .login-screen {
+    background-color: #f4f4f4;
+    background-image:
+      radial-gradient(ellipse 140% 110% at 0% 0%, rgb(0 0 0 / 0.03), transparent 72%),
+      radial-gradient(ellipse 120% 100% at 100% 100%, rgb(0 0 0 / 0.06), transparent 70%),
+      linear-gradient(165deg, #f7f7f7 0%, #f1f1f1 55%, #e4e4e4 100%);
+  }
+
   .typing-dots {
     display: inline-flex;
     align-items: center;

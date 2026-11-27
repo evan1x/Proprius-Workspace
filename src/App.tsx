@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { ChatInput, type ChatInputHandle } from "./components/ChatInput";
+import { LoginScreen } from "./components/LoginScreen";
 import { ChatWindow } from "./components/ChatWindow";
 import { FileViewer } from "./components/FileViewer";
 import { ModelParametersPanel } from "./components/ModelParametersPanel";
@@ -24,6 +25,12 @@ import {
   saveModelParameters,
   type ModelParameters,
 } from "./types/modelParams";
+import {
+  restoreSession,
+  setActiveUser,
+  signOut,
+  type Account,
+} from "./services/auth";
 import {
   createEmptyConversation,
   deleteConversation,
@@ -61,10 +68,20 @@ import type {
   Folder,
 } from "./types/chat";
 
-/** Below this width, Models/Settings overlay instead of splitting the chat. */
-const OVERLAY_PANELS_BELOW = 1100;
+/** Chat column floor, in rem, before a side panel starts overlaying. */
+const CHAT_MIN_REM = 22;
 /** Below this width, hide the conversations sidebar while a panel is open. */
 const HIDE_SIDEBAR_WITH_PANEL_BELOW = 900;
+
+function readStoredWidth(key: string, fallback: number): number {
+  try {
+    const parsed = Number(window.localStorage.getItem(key));
+    if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+    return parsed;
+  } catch {
+    return fallback;
+  }
+}
 
 function createMessage(
   role: ChatMessage["role"],
@@ -107,6 +124,8 @@ function sortByUpdatedAt(conversations: Conversation[]): Conversation[] {
 }
 
 function App() {
+  const [session, setSession] = useState<Account | null>(null);
+  const [sessionReady, setSessionReady] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [generatedFiles, setGeneratedFiles] = useState<GeneratedFile[]>([]);
@@ -133,8 +152,9 @@ function App() {
   const [externalPullRequest, setExternalPullRequest] =
     useState<ExternalPullRequest | null>(null);
   const [viewportWidth, setViewportWidth] = useState(() =>
-    typeof window === "undefined" ? OVERLAY_PANELS_BELOW : window.innerWidth,
+    typeof window === "undefined" ? 1100 : window.innerWidth,
   );
+  const [layoutTick, setLayoutTick] = useState(0);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [uiScale, setUiScale] = useState(loadUiScale);
@@ -186,9 +206,28 @@ function App() {
     generatedFiles.find((file) => file.id === openFileId) ?? null;
   const messages = activeConversation?.messages ?? [];
   const sidePanelOpen = modelsOpen || settingsOpen || parametersOpen;
-  const overlayPanels = viewportWidth < OVERLAY_PANELS_BELOW;
   const hideSidebar =
     sidePanelOpen && viewportWidth < HIDE_SIDEBAR_WITH_PANEL_BELOW;
+  const chatMinWidth = (CHAT_MIN_REM * 16 * uiScale) / 100;
+  const sidebarWidth = hideSidebar
+    ? 0
+    : sidebarCollapsed
+      ? 52
+      : Math.min(
+          readStoredWidth("proprius.conversationsSidebarWidth.v2", 304),
+          viewportWidth * 0.42,
+        );
+  const dockedPanelWidth = parametersOpen
+    ? readStoredWidth("proprius.parametersPanelWidth", 384)
+    : settingsOpen
+      ? readStoredWidth("proprius.settingsPanelWidth", 384)
+      : modelsOpen
+        ? readStoredWidth("proprius.modelsPanelWidth", 416)
+        : 0;
+  const overlayPanels =
+    layoutTick >= 0 &&
+    sidePanelOpen &&
+    viewportWidth < sidebarWidth + dockedPanelWidth + chatMinWidth;
 
   useEffect(() => {
     function handleResize() {
@@ -198,6 +237,15 @@ function App() {
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    function refreshLayout() {
+      setLayoutTick((current) => current + 1);
+    }
+
+    window.addEventListener("pointerup", refreshLayout);
+    return () => window.removeEventListener("pointerup", refreshLayout);
   }, []);
 
   function hasFilePayload(event: DragEvent) {
@@ -245,7 +293,47 @@ function App() {
   useEffect(() => {
     let cancelled = false;
 
+    async function restore() {
+      try {
+        const account = await restoreSession();
+        if (!cancelled) setSession(account);
+      } catch (err) {
+        if (!cancelled) {
+          setSession(null);
+          setError(
+            err instanceof Error ? err.message : "Could not open the account database.",
+          );
+        }
+      } finally {
+        if (!cancelled) setSessionReady(true);
+      }
+    }
+
+    void restore();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
     async function loadConversations() {
+      if (!session) {
+        setIsLoading(false);
+        return;
+      }
+
+      setActiveUser(session);
+      setIsLoading(true);
+      setConversations([]);
+      setFolders([]);
+      setGeneratedFiles([]);
+      setActiveId(null);
+      setOpenFileId(null);
+      setFocusMessage(null);
+      setEditingTitle(false);
+
       try {
         const [stored, storedFolders] = await Promise.all([
           listConversations(),
@@ -289,7 +377,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [session]);
 
   useEffect(() => {
     let cancelled = false;
@@ -743,6 +831,42 @@ function App() {
         : `Model missing — run ollama pull ${model}`
       : "Ollama offline";
 
+  function handleSignOut() {
+    signOut();
+    setSession(null);
+    setConversations([]);
+    setFolders([]);
+    setGeneratedFiles([]);
+    setActiveId(null);
+    setOpenFileId(null);
+    setFocusMessage(null);
+    setEditingTitle(false);
+    setError(null);
+    setModelsOpen(false);
+    setSettingsOpen(false);
+    setParametersOpen(false);
+  }
+
+  if (!sessionReady) {
+    return (
+      <div className="flex h-full items-center justify-center bg-paper text-sm text-ink-muted">
+        Loading…
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <LoginScreen
+        onSignedIn={(account) => {
+          setActiveUser(account);
+          setError(null);
+          setSession(account);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="relative flex h-full min-w-0 overflow-hidden bg-paper">
       <Sidebar
@@ -795,7 +919,7 @@ function App() {
       />
 
       <div
-        className="relative flex min-h-0 min-w-0 flex-1 flex-col workspace-main"
+        className="relative flex min-h-0 min-w-[min(22rem,100%)] flex-1 basis-0 flex-col workspace-main"
         onDragEnter={handleChatDragEnter}
         onDragLeave={handleChatDragLeave}
         onDragOver={handleChatDragOver}
@@ -858,6 +982,18 @@ function App() {
               )}
             </div>
             <div className="flex shrink-0 items-stretch gap-1.5 sm:gap-2">
+              <button
+                type="button"
+                disabled={isGenerating}
+                title={`Sign out ${session.username}`}
+                onClick={handleSignOut}
+                className="border border-line bg-panel px-2.5 py-2 text-left text-ink transition hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40 sm:px-3"
+              >
+                <p className="text-[10px] uppercase tracking-[0.12em] text-ink-muted">
+                  {session.username}
+                </p>
+                <p className="mt-0.5 text-xs font-medium tracking-wide">Sign out</p>
+              </button>
               <button
                 type="button"
                 disabled={isGenerating || isLoading}

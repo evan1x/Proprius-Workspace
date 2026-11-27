@@ -1,4 +1,5 @@
 import Database from "@tauri-apps/plugin-sql";
+import { currentUserId } from "./auth";
 
 const DB_URL = "sqlite:proprius.db";
 
@@ -240,9 +241,14 @@ export function extractGeneratedFiles(
 export async function listGeneratedFiles(): Promise<GeneratedFile[]> {
   const db = await getDb();
   const rows = await db.select<GeneratedFileRow[]>(
-    `SELECT id, conversation_id, message_id, name, language, content, created_at
+    `SELECT generated_files.id, generated_files.conversation_id, generated_files.message_id,
+            generated_files.name, generated_files.language, generated_files.content,
+            generated_files.created_at
      FROM generated_files
-     ORDER BY created_at DESC`,
+     INNER JOIN conversations ON conversations.id = generated_files.conversation_id
+     WHERE conversations.user_id = $1
+     ORDER BY generated_files.created_at DESC`,
+    [currentUserId()],
   );
   return rows.map(mapFile);
 }
@@ -295,7 +301,14 @@ export async function replaceGeneratedFilesForMessage(
 
 export async function deleteGeneratedFile(id: string): Promise<void> {
   const db = await getDb();
-  await db.execute("DELETE FROM generated_files WHERE id = $1", [id]);
+  await db.execute(
+    `DELETE FROM generated_files
+     WHERE id = $1
+       AND conversation_id IN (
+         SELECT id FROM conversations WHERE user_id = $2
+       )`,
+    [id, currentUserId()],
+  );
 }
 
 async function existingFileRows(
