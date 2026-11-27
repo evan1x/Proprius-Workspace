@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  useEffect,
   useImperativeHandle,
   useRef,
   useState,
@@ -16,6 +17,8 @@ import type { ChatAttachment } from "../types/chat";
 
 interface ChatInputProps {
   disabled?: boolean;
+  /** User messages in this chat, newest first. Up arrow walks backward through them. */
+  previousPrompts?: string[];
   onSend: (prompt: string, attachments: ChatAttachment[]) => void;
 }
 
@@ -25,13 +28,21 @@ export interface ChatInputHandle {
 }
 
 export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
-  function ChatInput({ disabled = false, onSend }, ref) {
+  function ChatInput({ disabled = false, previousPrompts = [], onSend }, ref) {
     const [value, setValue] = useState("");
     const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
     const [attachError, setAttachError] = useState<string | null>(null);
     const [readingFiles, setReadingFiles] = useState(false);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+    const historyIndexRef = useRef<number | null>(null);
+    const previousPromptsRef = useRef(previousPrompts);
+    previousPromptsRef.current = previousPrompts;
+    const historyKey = previousPrompts.join("\u0000");
+
+    useEffect(() => {
+      historyIndexRef.current = null;
+    }, [historyKey]);
     const attachmentsRef = useRef(attachments);
     const readingFilesRef = useRef(readingFiles);
     const disabledRef = useRef(disabled);
@@ -101,10 +112,22 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       if (!prompt && attachments.length === 0) return;
 
       onSend(prompt, attachments);
+      historyIndexRef.current = null;
       setValue("");
       setAttachments([]);
       setAttachError(null);
       textareaRef.current?.focus();
+    }
+
+    function placeCursor(text: string) {
+      setValue(text);
+      const cursor = text.length;
+      requestAnimationFrame(() => {
+        const node = textareaRef.current;
+        if (!node) return;
+        node.focus();
+        node.setSelectionRange(cursor, cursor);
+      });
     }
 
     function handleSubmit(event: FormEvent) {
@@ -113,6 +136,40 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     }
 
     function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+      const plainArrow =
+        !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey;
+      const prompts = previousPromptsRef.current;
+      const historyIndex = historyIndexRef.current;
+      const showingHistory =
+        historyIndex !== null && value === prompts[historyIndex];
+
+      if (event.key === "ArrowUp" && plainArrow && prompts.length > 0) {
+        if (value.length === 0 || showingHistory) {
+          const nextIndex = historyIndex === null ? 0 : historyIndex + 1;
+          if (nextIndex < prompts.length) {
+            event.preventDefault();
+            historyIndexRef.current = nextIndex;
+            placeCursor(prompts[nextIndex]);
+          } else {
+            event.preventDefault();
+          }
+          return;
+        }
+      }
+
+      if (event.key === "ArrowDown" && plainArrow && showingHistory) {
+        event.preventDefault();
+        const nextIndex = historyIndex - 1;
+        if (nextIndex < 0) {
+          historyIndexRef.current = null;
+          placeCursor("");
+        } else {
+          historyIndexRef.current = nextIndex;
+          placeCursor(prompts[nextIndex]);
+        }
+        return;
+      }
+
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
         submit();
@@ -174,7 +231,15 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               rows={2}
               value={value}
               disabled={disabled || readingFiles}
-              onChange={(event) => setValue(event.target.value)}
+              onChange={(event) => {
+                const next = event.target.value;
+                setValue(next);
+                const index = historyIndexRef.current;
+                const prompts = previousPromptsRef.current;
+                if (index !== null && next !== prompts[index]) {
+                  historyIndexRef.current = null;
+                }
+              }}
               onKeyDown={handleKeyDown}
               placeholder={
                 attachments.length > 0

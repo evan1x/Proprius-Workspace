@@ -1144,6 +1144,13 @@ function App() {
           <ChatInput
             ref={chatInputRef}
             disabled={isLoading}
+            previousPrompts={messages
+              .filter(
+                (message) =>
+                  message.role === "user" && message.content.trim().length > 0,
+              )
+              .map((message) => message.content)
+              .reverse()}
             onSend={handleSend}
           />
         )}
